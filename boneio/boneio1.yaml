@@ -1,0 +1,110 @@
+esphome:
+  name: boneio1
+  platform: ESP32
+  board: esp32dev
+
+wifi:
+  ssid: "LAN_FARMC"      # sieć wewnętrzna
+  password: "haslo1234"
+
+mqtt:
+  broker: 192.168.50.1   # lokalny broker (R1000/RPi)
+  topic_prefix: boneio/1
+
+# Przekaźniki (przykład – dostosuj do pinów BONEIO)
+switch:
+  - platform: gpio
+    pin: GPIO16
+    id: vent1_up
+    name: "vent1_up"
+  - platform: gpio
+    pin: GPIO17
+    id: vent1_down
+    name: "vent1_down"
+  - platform: gpio
+    pin: GPIO18
+    id: vent2_up
+    name: "vent2_up"
+  - platform: gpio
+    pin: GPIO19
+    id: vent2_down
+    name: "vent2_down"
+  - platform: gpio
+    pin: GPIO21
+    id: vent3_up
+    name: "vent3_up"
+  - platform: gpio
+    pin: GPIO22
+    id: vent3_down
+    name: "vent3_down"
+
+binary_sensor:
+  # Błąd krańcowy/awaria – ODD inputs: IN1, IN3, IN5...
+  - platform: gpio
+    pin: GPIO32
+    name: "vent1_error"
+    id: vent1_error
+    filters: [invert]
+    on_press:
+      - mqtt.publish:
+          topic: boneio/1/in/vent1_error
+          payload: "1"
+    on_release:
+      - mqtt.publish:
+          topic: boneio/1/in/vent1_error
+          payload: "0"
+
+  - platform: gpio
+    pin: GPIO33
+    name: "vent2_error"
+    id: vent2_error
+    filters: [invert]
+    on_press:
+      - mqtt.publish: { topic: boneio/1/in/vent2_error, payload: "1" }
+    on_release:
+      - mqtt.publish: { topic: boneio/1/in/vent2_error, payload: "0" }
+
+  - platform: gpio
+    pin: GPIO25
+    name: "vent3_error"
+    id: vent3_error
+    filters: [invert]
+    on_press:  { then: - mqtt.publish: { topic: boneio/1/in/vent3_error, payload: "1" } }
+    on_release:{ then: - mqtt.publish: { topic: boneio/1/in/vent3_error, payload: "0" } }
+
+# Tematy komend (UP/DOWN) – odbiór z backendu
+# (możesz też użyć 'cover:' time-based, ale tu prosty ON/OFF po MQTT)
+mqtt:
+  on_json_message:
+    - topic: boneio/1/cover/vent1/up
+      then:
+        - if:
+            condition:
+              lambda: 'return x.containsKey("state") && x["state"] == "ON";'
+            then:
+              - switch.turn_on: vent1_up
+            else:
+              - switch.turn_off: vent1_up
+    - topic: boneio/1/cover/vent1/down
+      then:
+        - if:
+            condition:
+              lambda: 'return x.containsKey("state") && x["state"] == "ON";'
+            then:
+              - switch.turn_on: vent1_down
+            else:
+              - switch.turn_off: vent1_down
+
+    - topic: boneio/1/cover/vent2/up
+      then:
+        - if: { condition: { lambda: 'return x["state"]=="ON";' }, then: - switch.turn_on: vent2_up, else: - switch.turn_off: vent2_up }
+    - topic: boneio/1/cover/vent2/down
+      then:
+        - if: { condition: { lambda: 'return x["state"]=="ON";' }, then: - switch.turn_on: vent2_down, else: - switch.turn_off: vent2_down }
+
+    - topic: boneio/1/cover/vent3/up
+      then:
+        - if: { condition: { lambda: 'return x["state"]=="ON";' }, then: - switch.turn_on: vent3_up, else: - switch.turn_off: vent3_up }
+    - topic: boneio/1/cover/vent3/down
+      then:
+        - if: { condition: { lambda: 'return x["state"]=="ON";' }, then: - switch.turn_on: vent3_down, else: - switch.turn_off: vent3_down }

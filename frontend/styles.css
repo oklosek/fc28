@@ -1,0 +1,8 @@
+body { font-family: system-ui, sans-serif; margin: 16px; color: #111; }
+header { display:flex; justify-content: space-between; align-items: center; }
+#sensors { display: grid; grid-template-columns: repeat(2, minmax(200px,1fr)); gap:8px; margin: 12px 0; }
+#vents .vent-row { display:grid; grid-template-columns: 200px 1fr 60px 100px; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid #eee;}
+.ok { color: #0a0; }
+.err { color: #a00; font-weight: bold; }
+input[type=range] { width: 100%; }
+button { padding:6px 12px; border-radius:8px; border:1px solid #ccc; background:#f8f8f8; cursor:pointer;}

@@ -1,0 +1,12 @@
+[Unit]
+Description=Reverse SSH Tunnel to Mikr.us
+After=network-online.target
+
+[Service]
+User=pi
+ExecStart=/usr/bin/ssh -N -R 18080:localhost:8000 user@your-mikrus -i /home/pi/.ssh/id_rsa
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8"/>
+  <title>FarmCare – Dashboard</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <link rel="stylesheet" href="/static/styles.css"/>
+</head>
+<body>
+  <header>
+    <h1>FarmCare 2.0 – Dashboard</h1>
+    <button id="modeBtn">Przełącz na ręczny</button>
+  </header>
+
+  <section id="sensors">
+    <div>Temp. wewn.: <span id="t_in">–</span></div>
+    <div>Temp. zewn.: <span id="t_out">–</span></div>
+    <div>Wilgotność:  <span id="hum">–</span></div>
+    <div>Wiatr:       <span id="wind">–</span></div>
+    <div>Opady:       <span id="rain">–</span></div>
+  </section>
+
+  <section id="vents">
+    <h2>Wietrzniki</h2>
+    <div>
+      <label>Wszystkie:</label>
+      <input type="range" id="allRange" min="0" max="100" value="0"/>
+      <span id="allVal">0%</span>
+    </div>
+    <div id="ventList"></div>
+  </section>
+
+  <script src="/static/farmcare.js"></script>
+</body>
+</html>

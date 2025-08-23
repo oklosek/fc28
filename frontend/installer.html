@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8"/>
+  <title>FarmCare – Panel instalatora</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <link rel="stylesheet" href="/static/styles.css"/>
+</head>
+<body>
+  <h1>Panel instalatora</h1>
+  <div>
+    <label>Admin token: <input id="adm" type="password"/></label>
+    <button id="load">Wczytaj konfigurację</button>
+  </div>
+  <pre id="cfg"></pre>
+  <button id="calAll">Kalibracja wszystkich</button>
+
+  <script>
+  const $ = (s)=>document.querySelector(s);
+  $("#load").onclick = async ()=>{
+    const t = $("#adm").value;
+    const r = await fetch("/installer/config", {headers: {"x-admin-token": t}});
+    const j = await r.json();
+    $("#cfg").textContent = JSON.stringify(j, null, 2);
+  };
+  $("#calAll").onclick = async ()=>{
+    const t = $("#adm").value;
+    await fetch("/installer/calibrate/all", {method:"POST", headers: {"x-admin-token": t}});
+    alert("Kalibracja uruchomiona");
+  };
+  </script>
+</body>
+</html>

@@ -1,0 +1,92 @@
+# config/settings.yaml – centralna konfiguracja systemu
+control:
+  target_temp_c: 25
+  humidity_thr: 70
+  wind_risk_ms: 10
+  wind_crit_ms: 20
+  risk_open_limit_percent: 50
+  min_open_hum_percent: 20
+  crit_hum_crack_percent: 10
+  flush_hour: 12
+  calibration_hour: 0
+
+# Dwóch RS485: oddzielnie dla czujników wewn. i zewn.
+rs485_buses:
+  - name: "internal_bus"
+    port: "/dev/ttyUSB0"
+    baudrate: 9600
+    sensors:
+      # przykładowe mapowanie (slave,id,register)-> map_to
+      - { slave: 1, reg: 30001, map_to: "internal_temp" }
+      - { slave: 1, reg: 30002, map_to: "internal_hum" }
+  - name: "external_bus"
+    port: "/dev/ttyUSB1"
+    baudrate: 9600
+    sensors:
+      - { slave: 2, reg: 30001, map_to: "external_temp" }
+      - { slave: 2, reg: 30002, map_to: "wind_speed" }
+      - { slave: 2, reg: 30003, map_to: "rain" }
+
+# Mapowanie czujników publikowanych po MQTT (jeśli BoneIO publikuje)
+sensors:
+  internal_temp_topic: "farmcare/sensors/internalTemp"
+  external_temp_topic: "farmcare/sensors/externalTemp"
+  internal_hum_topic:  "farmcare/sensors/internalHumidity"
+  wind_speed_topic:    "farmcare/sensors/windSpeed"
+  rain_topic:          "farmcare/sensors/rain"
+
+# Urządzenia BONEIO (ESPHome) – nazwy logiczne
+boneio_devices:
+  - id: "boneio_1"
+    base_topic: "boneio/1"
+  - id: "boneio_2"
+    base_topic: "boneio/2"
+
+# Wietrzniki – dynamicznie; każdy ma kanały UP/DOWN na danym BONEIO
+# Oddzielne wejścia błędu (IN1, IN3, IN5, ...) – tu jako topic 'error_in'
+vents:
+  - id: 1
+    name: "Dach 1"
+    boneio_device: "boneio_1"
+    travel_time_s: 30
+    topics:
+      up:   "boneio/1/cover/vent1/up"
+      down: "boneio/1/cover/vent1/down"
+      error_in: "boneio/1/in/vent1_error"   # IN1
+  - id: 2
+    name: "Dach 2"
+    boneio_device: "boneio_1"
+    travel_time_s: 28
+    topics:
+      up:   "boneio/1/cover/vent2/up"
+      down: "boneio/1/cover/vent2/down"
+      error_in: "boneio/1/in/vent2_error"   # IN3
+  - id: 3
+    name: "Bok 1"
+    boneio_device: "boneio_1"
+    travel_time_s: 35
+    topics:
+      up:   "boneio/1/cover/vent3/up"
+      down: "boneio/1/cover/vent3/down"
+      error_in: "boneio/1/in/vent3_error"   # IN5
+  - id: 4
+    name: "Dach 3"
+    boneio_device: "boneio_2"
+    travel_time_s: 32
+    topics:
+      up:   "boneio/2/cover/vent4/up"
+      down: "boneio/2/cover/vent4/down"
+      error_in: "boneio/2/in/vent4_error"   # IN1
+  # ... dodawaj kolejne – system skalowalny
+
+# Grupy/partie – sekwencja: otwieraj w kolejności, z przerwą, by nie przeciążać instalacji
+vent_groups:
+  - name: "Dachowe partia 1"
+    vents: [1,2,4]
+    delay_s: 2
+  - name: "Boczne"
+    vents: [3]
+    delay_s: 2
+
+security:
+  require_token: true     # WAN wymaga nagłówka x-admin-token

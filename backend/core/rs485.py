@@ -36,7 +36,12 @@ class RS485Manager:
     async def stop(self):
         self.running = False
         if self._task:
-            await asyncio.sleep(0)
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+            finally:
+                self._task = None
 
     async def _loop(self):
         while self.running:

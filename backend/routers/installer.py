@@ -13,7 +13,7 @@ def get_config(auth=Depends(require_admin)):
 
 @router.post("/config/control")
 def set_control(payload=Body(...), auth=Depends(require_admin)):
-    # W tej wersji zapis do settings.yaml robiony ręcznie; tu można dodać zapis do DB
+    # Zapisuje wartości do bazy; settings.yaml aktualizować osobno
     with SessionLocal() as s:
         for k, v in payload.items():
             s.merge(Setting(key=f"control.{k}", value=str(v)))

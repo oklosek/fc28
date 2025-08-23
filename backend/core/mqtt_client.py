@@ -19,8 +19,10 @@ TOPIC_MAP = {
     SENSORS.get("rain_topic",          "farmcare/sensors/rain"): ("rain"),
 }
 
-# Tematy dostępności/awarii wietrzników (każdy vent ma swój)
+# Tematy dostępności wietrzników
 VENT_AVAIL_TOPICS = [f'farmcare/vents/{v["id"]}/available' for v in VENTS]
+# Tematy błędów krańcowych z urządzeń BONEIO
+VENT_ERROR_TOPIC_MAP = {v["topics"].get("error_in"): v["id"] for v in VENTS if v["topics"].get("error_in")}
 
 async def _handle_messages():
     async with AsyncExitStack() as stack:
@@ -29,7 +31,7 @@ async def _handle_messages():
                         password=settings.MQTT_PASSWORD or None)
         await stack.enter_async_context(client)
         # Subskrypcje
-        topics = list(TOPIC_MAP.keys()) + VENT_AVAIL_TOPICS
+        topics = list(TOPIC_MAP.keys()) + VENT_AVAIL_TOPICS + list(VENT_ERROR_TOPIC_MAP.keys())
         for t in topics:
             await client.subscribe(t)
         # Pętla odbioru
@@ -46,6 +48,12 @@ async def _handle_messages():
                         with SessionLocal() as s:  # type: Session
                             s.add(SensorLog(name=name, value=val))
                             s.commit()
+                    elif topic in VENT_ERROR_TOPIC_MAP:
+                        vid = VENT_ERROR_TOPIC_MAP[topic]
+                        state = payload not in ("0", "false", "False", "OFF")
+                        from backend.app import controller
+                        if controller:
+                            controller.mark_error(vid, state)
                     elif topic.startswith("farmcare/vents/") and topic.endswith("/available"):
                         # aktualizacja dostępności wietrznika – zapisze to kontroler (event)
                         pass

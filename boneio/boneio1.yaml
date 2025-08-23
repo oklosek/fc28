@@ -10,6 +10,46 @@ wifi:
 mqtt:
   broker: 192.168.50.1   # lokalny broker (R1000/RPi)
   topic_prefix: boneio/1
+  on_message:
+    # Komendy otwierania/zamykania otrzymywane z backendu
+    - topic: boneio/1/cover/vent1/up
+      payload: "ON"
+      then: { switch.turn_on: vent1_up }
+    - topic: boneio/1/cover/vent1/up
+      payload: "OFF"
+      then: { switch.turn_off: vent1_up }
+    - topic: boneio/1/cover/vent1/down
+      payload: "ON"
+      then: { switch.turn_on: vent1_down }
+    - topic: boneio/1/cover/vent1/down
+      payload: "OFF"
+      then: { switch.turn_off: vent1_down }
+
+    - topic: boneio/1/cover/vent2/up
+      payload: "ON"
+      then: { switch.turn_on: vent2_up }
+    - topic: boneio/1/cover/vent2/up
+      payload: "OFF"
+      then: { switch.turn_off: vent2_up }
+    - topic: boneio/1/cover/vent2/down
+      payload: "ON"
+      then: { switch.turn_on: vent2_down }
+    - topic: boneio/1/cover/vent2/down
+      payload: "OFF"
+      then: { switch.turn_off: vent2_down }
+
+    - topic: boneio/1/cover/vent3/up
+      payload: "ON"
+      then: { switch.turn_on: vent3_up }
+    - topic: boneio/1/cover/vent3/up
+      payload: "OFF"
+      then: { switch.turn_off: vent3_up }
+    - topic: boneio/1/cover/vent3/down
+      payload: "ON"
+      then: { switch.turn_on: vent3_down }
+    - topic: boneio/1/cover/vent3/down
+      payload: "OFF"
+      then: { switch.turn_off: vent3_down }
 
 # Przekaźniki (przykład – dostosuj do pinów BONEIO)
 switch:
@@ -60,51 +100,25 @@ binary_sensor:
     id: vent2_error
     filters: [invert]
     on_press:
-      - mqtt.publish: { topic: boneio/1/in/vent2_error, payload: "1" }
+      - mqtt.publish:
+          topic: boneio/1/in/vent2_error
+          payload: "1"
     on_release:
-      - mqtt.publish: { topic: boneio/1/in/vent2_error, payload: "0" }
+      - mqtt.publish:
+          topic: boneio/1/in/vent2_error
+          payload: "0"
 
   - platform: gpio
     pin: GPIO25
     name: "vent3_error"
     id: vent3_error
     filters: [invert]
-    on_press:  { then: - mqtt.publish: { topic: boneio/1/in/vent3_error, payload: "1" } }
-    on_release:{ then: - mqtt.publish: { topic: boneio/1/in/vent3_error, payload: "0" } }
+    on_press:
+      - mqtt.publish:
+          topic: boneio/1/in/vent3_error
+          payload: "1"
+    on_release:
+      - mqtt.publish:
+          topic: boneio/1/in/vent3_error
+          payload: "0"
 
-# Tematy komend (UP/DOWN) – odbiór z backendu
-# (możesz też użyć 'cover:' time-based, ale tu prosty ON/OFF po MQTT)
-mqtt:
-  on_json_message:
-    - topic: boneio/1/cover/vent1/up
-      then:
-        - if:
-            condition:
-              lambda: 'return x.containsKey("state") && x["state"] == "ON";'
-            then:
-              - switch.turn_on: vent1_up
-            else:
-              - switch.turn_off: vent1_up
-    - topic: boneio/1/cover/vent1/down
-      then:
-        - if:
-            condition:
-              lambda: 'return x.containsKey("state") && x["state"] == "ON";'
-            then:
-              - switch.turn_on: vent1_down
-            else:
-              - switch.turn_off: vent1_down
-
-    - topic: boneio/1/cover/vent2/up
-      then:
-        - if: { condition: { lambda: 'return x["state"]=="ON";' }, then: - switch.turn_on: vent2_up, else: - switch.turn_off: vent2_up }
-    - topic: boneio/1/cover/vent2/down
-      then:
-        - if: { condition: { lambda: 'return x["state"]=="ON";' }, then: - switch.turn_on: vent2_down, else: - switch.turn_off: vent2_down }
-
-    - topic: boneio/1/cover/vent3/up
-      then:
-        - if: { condition: { lambda: 'return x["state"]=="ON";' }, then: - switch.turn_on: vent3_up, else: - switch.turn_off: vent3_up }
-    - topic: boneio/1/cover/vent3/down
-      then:
-        - if: { condition: { lambda: 'return x["state"]=="ON";' }, then: - switch.turn_on: vent3_down, else: - switch.turn_off: vent3_down }

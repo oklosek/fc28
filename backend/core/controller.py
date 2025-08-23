@@ -16,6 +16,7 @@ class Controller:
         self.vents: Dict[int, Vent] = {}
         self._running = False
         self._thread = None
+        self._async_loop = None
         self._load_vents_from_config()
         self._load_state_from_db()
         self._batch_cfg = VENT_GROUPS  # sekwencje/partie otwierania
@@ -118,8 +119,8 @@ class Controller:
             s.commit()
 
     def _loop(self):
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        self._async_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self._async_loop)
         last_auto_target = None
         while self._running:
             try:
@@ -140,7 +141,7 @@ class Controller:
                     base = self._compute_auto_target(s1)
                     target = self._apply_safety(base, s1, manual=False)
                     if last_auto_target is None or abs(target - last_auto_target) >= 1.0:
-                        loop.run_until_complete(self._move_in_batches(target))
+                        self._async_loop.run_until_complete(self._move_in_batches(target))
                         for vid in self.vents:
                             self.vents[vid].user_target = target
                             self._save_vent_state(vid)
@@ -151,7 +152,7 @@ class Controller:
                         desired = v.user_target
                         safe = self._apply_safety(desired, s1, manual=True)
                         if abs(safe - v.position) >= 1.0:
-                            loop.run_until_complete(v.move_to(safe))
+                            self._async_loop.run_until_complete(v.move_to(safe))
                             self._save_vent_state(vid)
                 time.sleep(1.0)
             except Exception as e:
@@ -180,10 +181,10 @@ class Controller:
             self._save_vent_state(vent_id)
 
     def calibrate_all(self):
-        loop = asyncio.get_event_loop()
         async def _cal():
             for v in self.vents.values():
                 if v.available:
                     await v.calibrate_close()
                     self._save_vent_state(v.id)
-        loop.create_task(_cal())
+        if self._async_loop:
+            asyncio.run_coroutine_threadsafe(_cal(), self._async_loop)

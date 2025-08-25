@@ -52,6 +52,13 @@ boneio_devices:
   - id: "boneio_2"
     base_topic: "boneio/2"
 
+# Domyślne parametry działania wietrzników
+vent_defaults:
+  reverse_pause_s: 1.0
+  min_move_s: 0.5
+  calibration_buffer_s: 0.5
+  ignore_delta_percent: 0.5
+
 # Wietrzniki – dynamicznie; każdy ma kanały UP/DOWN na danym BONEIO
 # Oddzielne wejścia błędu (IN1, IN3, IN5, ...) – tu jako topic 'error_in'
 vents:

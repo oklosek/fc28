@@ -10,6 +10,7 @@ control:
   flush_hour: 12
   calibration_hour: 0
   allow_humidity_override: false
+  temp_diff_percent: 5
   step_percent: 10
   step_delay_s: 10
   group_delay_s: 5

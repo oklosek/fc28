@@ -60,5 +60,6 @@ BONEIOS = yaml_cfg.get("boneio_devices", [])                # mapowanie kanałó
 SENSORS = yaml_cfg.get("sensors", {})                       # mapowanie czujników
 RS485_BUSES = yaml_cfg.get("rs485_buses", [])               # dwie magistrale
 CONTROL = yaml_cfg.get("control", {})                       # progi, czasy itp.
+CONTROL.setdefault("temp_diff_percent", 5.0)
 SECURITY = yaml_cfg.get("security", {})                     # polityka WAN/LAN
 AVG_WINDOW_S = yaml_cfg.get("sensor_avg_window_s", 5)

@@ -80,13 +80,14 @@ class Controller:
     def _compute_auto_target(self, s: dict) -> float:
         target_temp = CONTROL.get("target_temp_c", 25.0)
         hum_thr     = CONTROL.get("humidity_thr", 70.0)
+        diff_pct    = CONTROL.get("temp_diff_percent", 5.0)
         diff = s["internal_temp"] - target_temp
-        # prosta proporcja: 5% / 1°C
+        # prosta proporcja: temp_diff_percent% / 1°C
         pct = 0.0
         if diff > 0 and s["external_temp"] < s["internal_temp"]:
-            pct = min(100.0, diff * 5.0)
+            pct = min(100.0, diff * diff_pct)
         elif diff < 0 and s["external_temp"] > s["internal_temp"]:
-            pct = min(100.0, abs(diff) * 5.0)
+            pct = min(100.0, abs(diff) * diff_pct)
         # wilgotność wymusza min. wietrzenie (gdy bez deszczu/wiatru krytycznego – sprawdzimy niżej)
         if s["internal_hum"] > hum_thr and pct < CONTROL.get("min_open_hum_percent", 20.0):
             pct = CONTROL.get("min_open_hum_percent", 20.0)

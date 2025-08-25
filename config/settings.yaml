@@ -38,12 +38,23 @@ rs485_buses:
       - { slave: 2, reg: 30003, map_to: "rain" }
 
 # Mapowanie czujników publikowanych po MQTT (jeśli BoneIO publikuje)
+# Każdy czujnik może mieć własne okno uśredniania (avg_window_s).
 sensors:
-  internal_temp_topic: "farmcare/sensors/internalTemp"
-  external_temp_topic: "farmcare/sensors/externalTemp"
-  internal_hum_topic:  "farmcare/sensors/internalHumidity"
-  wind_speed_topic:    "farmcare/sensors/windSpeed"
-  rain_topic:          "farmcare/sensors/rain"
+  internal_temp:
+    topic: "farmcare/sensors/internalTemp"
+    avg_window_s: 5
+  external_temp:
+    topic: "farmcare/sensors/externalTemp"
+    avg_window_s: 5
+  internal_hum:
+    topic: "farmcare/sensors/internalHumidity"
+    avg_window_s: 5
+  wind_speed:
+    topic: "farmcare/sensors/windSpeed"
+    avg_window_s: 3
+  rain:
+    topic: "farmcare/sensors/rain"
+    avg_window_s: 10
 
 # Urządzenia BONEIO (ESPHome) – nazwy logiczne
 boneio_devices:

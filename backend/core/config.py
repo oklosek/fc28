@@ -58,9 +58,33 @@ VENT_GROUPS = yaml_cfg.get("vent_groups", [])               # partie/sekwencje
 VENTS = yaml_cfg.get("vents", [])                           # wszystkie wietrzniki (dynamicznie)
 BONEIOS = yaml_cfg.get("boneio_devices", [])                # mapowanie kanałów
 VENT_DEFAULTS = yaml_cfg.get("vent_defaults", {})           # domyślne parametry wietrzników
-SENSORS = yaml_cfg.get("sensors", {})                       # mapowanie czujników
+
+# Sensory z domyślnymi tematami i oknami uśredniania
+DEFAULT_SENSOR_TOPICS = {
+    "internal_temp": "farmcare/sensors/internalTemp",
+    "external_temp": "farmcare/sensors/externalTemp",
+    "internal_hum": "farmcare/sensors/internalHumidity",
+    "wind_speed": "farmcare/sensors/windSpeed",
+    "rain": "farmcare/sensors/rain",
+}
+raw_sensors = yaml_cfg.get("sensors", {})
+# Obsługa starego formatu *_topic
+if any(k.endswith("_topic") for k in raw_sensors.keys()):
+    SENSORS = {}
+    for name, default_topic in DEFAULT_SENSOR_TOPICS.items():
+        key = f"{name}_topic"
+        if key in raw_sensors:
+            SENSORS[name] = {"topic": raw_sensors[key]}
+else:
+    SENSORS = raw_sensors
+
+AVG_WINDOW_S = yaml_cfg.get("sensor_avg_window_s", 5)
+for name, default_topic in DEFAULT_SENSOR_TOPICS.items():
+    SENSORS.setdefault(name, {})
+    SENSORS[name].setdefault("topic", default_topic)
+    SENSORS[name].setdefault("avg_window_s", AVG_WINDOW_S)
+
 RS485_BUSES = yaml_cfg.get("rs485_buses", [])               # dwie magistrale
 CONTROL = yaml_cfg.get("control", {})                       # progi, czasy itp.
 CONTROL.setdefault("temp_diff_percent", 5.0)
 SECURITY = yaml_cfg.get("security", {})                     # polityka WAN/LAN
-AVG_WINDOW_S = yaml_cfg.get("sensor_avg_window_s", 5)

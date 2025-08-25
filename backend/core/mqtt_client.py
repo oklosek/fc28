@@ -6,7 +6,7 @@ try:
     from asyncio_mqtt import Client, MqttError
 except Exception:  # pragma: no cover - brak biblioteki w środowisku testowym
     Client = MqttError = None
-from backend.core.config import settings, SENSORS, VENTS, AVG_WINDOW_S
+from backend.core.config import settings, SENSORS, VENTS
 from backend.core.models import SensorSnapshot
 try:
     from backend.core.db import SessionLocal, SensorLog
@@ -17,20 +17,14 @@ except Exception:  # pragma: no cover - brak bazy w testach
     SensorLog = None
 
 sensor_bus = SensorSnapshot()
-sensor_bus.set_window(AVG_WINDOW_S)
+sensor_bus.set_window({name: cfg.get("avg_window_s") for name, cfg in SENSORS.items()})
 
 def set_avg_window(window: int):
     """Ustaw nowe okno uśredniania dla wszystkich czujników."""
     sensor_bus.set_window(window)
 
 # Mapowanie tematów MQTT -> pola w sensor_bus
-TOPIC_MAP = {
-    SENSORS.get("internal_temp_topic", "farmcare/sensors/internalTemp"): ("internal_temp"),
-    SENSORS.get("external_temp_topic", "farmcare/sensors/externalTemp"): ("external_temp"),
-    SENSORS.get("internal_hum_topic",  "farmcare/sensors/internalHumidity"): ("internal_hum"),
-    SENSORS.get("wind_speed_topic",    "farmcare/sensors/windSpeed"): ("wind_speed"),
-    SENSORS.get("rain_topic",          "farmcare/sensors/rain"): ("rain"),
-}
+TOPIC_MAP = {cfg["topic"]: name for name, cfg in SENSORS.items()}
 
 # Tematy dostępności wietrzników
 VENT_AVAIL_TOPICS = [f'farmcare/vents/{v["id"]}/available' for v in VENTS]

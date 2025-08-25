@@ -29,6 +29,15 @@ class SensorSnapshot:
     wind_speed:    SensorAverager = field(default_factory=SensorAverager)
     rain:          SensorAverager = field(default_factory=SensorAverager)
 
-    def set_window(self, window: int):
-        for name in self.__dataclass_fields__:
-            getattr(self, name).set_window(window)
+    def set_window(self, window):
+        """Ustaw okno uśredniania.
+
+        Może przyjąć liczbę (dla wszystkich czujników) lub mapę {nazwa: okno}.
+        """
+        if isinstance(window, dict):
+            for name, w in window.items():
+                if hasattr(self, name):
+                    getattr(self, name).set_window(w)
+        else:
+            for name in self.__dataclass_fields__:
+                getattr(self, name).set_window(window)

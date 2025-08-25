@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # backend/core/rs485.py – odczyt z dwóch magistral RS485 (np. Modbus RTU) + uśrednianie
 import asyncio
-from backend.core.config import RS485_BUSES
+from backend.core.config import RS485_BUSES, SENSORS
 from backend.core.models import SensorSnapshot
 
 # Uwaga: w realu użyj minimalmodbus/pymodbus; tu pokazuję szkic z pseudo-odczytem
@@ -26,6 +26,7 @@ class RS485Manager:
     def __init__(self):
         self.buses = [RS485Bus(**b) for b in RS485_BUSES]
         self.snapshot = SensorSnapshot()
+        self.snapshot.set_window({name: cfg.get("avg_window_s") for name, cfg in SENSORS.items()})
         self._task = None
         self.running = False
 

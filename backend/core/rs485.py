@@ -19,7 +19,8 @@ class RS485Bus:
         # Zwróć dict { "internal_temp": 23.4, ... } dla dopiętych czujników
         result = {}
         for s in self.sensors:
-            result[s["map_to"]] = 0.0  # domyślnie
+            # zwróć None przy nieudanym odczycie aby odróżnić od wartości 0
+            result[s["map_to"]] = None
         return result
 
 class RS485Manager:
@@ -49,14 +50,18 @@ class RS485Manager:
             for bus in self.buses:
                 vals = await bus.read_all()
                 for k, v in vals.items():
-                    getattr(self.snapshot, k).add(v)
+                    if v is not None:
+                        getattr(self.snapshot, k).add(v)
             await asyncio.sleep(1.0)
 
     def averages(self) -> dict:
+        def _avg_or_none(av):
+            return av.avg() if av.q else None
+
         return {
-            "internal_temp": self.snapshot.internal_temp.avg(),
-            "external_temp": self.snapshot.external_temp.avg(),
-            "internal_hum":  self.snapshot.internal_hum.avg(),
-            "wind_speed":    self.snapshot.wind_speed.avg(),
-            "rain":          self.snapshot.rain.avg(),
+            "internal_temp": _avg_or_none(self.snapshot.internal_temp),
+            "external_temp": _avg_or_none(self.snapshot.external_temp),
+            "internal_hum":  _avg_or_none(self.snapshot.internal_hum),
+            "wind_speed":    _avg_or_none(self.snapshot.wind_speed),
+            "rain":          _avg_or_none(self.snapshot.rain),
         }

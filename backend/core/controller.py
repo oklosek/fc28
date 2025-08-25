@@ -176,9 +176,10 @@ class Controller:
                     "rain":          sensor_bus.rain.avg(),
                 }
                 s2 = self.rs485.averages()
-                # merge – jeśli RS485 wartość != 0 to przyjmij RS485 jako bardziej wiarygodny
+                # merge – jeśli RS485 ma wartość (również 0) to przyjmij ją jako bardziej wiarygodną
                 for k in s1:
-                    if s2.get(k, 0) > 0: s1[k] = s2[k]
+                    if s2.get(k) is not None:
+                        s1[k] = s2[k]
                 # tryb
                 if self.mode == "auto":
                     base = self._compute_auto_target(s1)

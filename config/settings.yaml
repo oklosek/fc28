@@ -13,6 +13,8 @@ control:
   step_percent: 10
   step_delay_s: 10
   group_delay_s: 5
+  movement_tolerance_percent: 0.5
+  target_change_percent: 1.0
 
 sensor_avg_window_s: 5
 

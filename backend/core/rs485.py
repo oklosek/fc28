@@ -18,8 +18,10 @@ class RS485Bus:
         # np. minimalmodbus.Instrument('/dev/ttyS0', slave_id).read_register(reg, 1)
         # Zwróć dict { "internal_temp": 23.4, ... } dla dopiętych czujników
         result = {}
-        for s in self.sensors:
-            result[s["map_to"]] = 0.0  # domyślnie
+        for sensor in self.sensors:
+            value = 0.0  # domyślnie
+            value = value * sensor.get("scale", 1) + sensor.get("offset", 0)
+            result[sensor["map_to"]] = value
         return result
 
 class RS485Manager:

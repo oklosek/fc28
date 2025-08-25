@@ -27,15 +27,15 @@ rs485_buses:
     baudrate: 9600
     sensors:
       # przykładowe mapowanie (slave,id,register)-> map_to
-      - { slave: 1, reg: 30001, map_to: "internal_temp" }
-      - { slave: 1, reg: 30002, map_to: "internal_hum" }
+      - { slave: 1, reg: 30001, map_to: "internal_temp", scale: 1.0, offset: 0.0 }
+      - { slave: 1, reg: 30002, map_to: "internal_hum",  scale: 1.0, offset: 0.0 }
   - name: "external_bus"
     port: "/dev/ttyUSB1"
     baudrate: 9600
     sensors:
-      - { slave: 2, reg: 30001, map_to: "external_temp" }
-      - { slave: 2, reg: 30002, map_to: "wind_speed" }
-      - { slave: 2, reg: 30003, map_to: "rain" }
+      - { slave: 2, reg: 30001, map_to: "external_temp", scale: 1.0, offset: 0.0 }
+      - { slave: 2, reg: 30002, map_to: "wind_speed",    scale: 1.0, offset: 0.0 }
+      - { slave: 2, reg: 30003, map_to: "rain",          scale: 1.0, offset: 0.0 }
 
 # Mapowanie czujników publikowanych po MQTT (jeśli BoneIO publikuje)
 sensors:

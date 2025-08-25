@@ -96,7 +96,8 @@ class Controller:
         risk = CONTROL.get("wind_risk_ms", 10.0)
         crit = CONTROL.get("wind_crit_ms", 20.0)
         lim  = CONTROL.get("risk_open_limit_percent", 50.0)
-        rain = s["rain"] > CONTROL.get("rain_thr", 0.5)
+        rain_thr = CONTROL.get("rain_thr", 0.5)
+        rain = s["rain"] > rain_thr
         allow_override = CONTROL.get("allow_humidity_override", False)
         # krytyk: domyślnie zamknij wszystko; opcjonalna szczelina przy wilgotności
         if s["wind_speed"] >= crit or rain:
@@ -176,17 +177,18 @@ class Controller:
                 for k in s1:
                     if s2.get(k, 0) > 0: s1[k] = s2[k]
                 # tryb
+                change_thr = CONTROL.get("target_change_percent", 1.0)
+                rain_thr = CONTROL.get("rain_thr", 0.5)
                 if self.mode == "auto":
                     base = self._compute_auto_target(s1)
                     target = self._apply_safety(base, s1, manual=False)
                     if (
                         self._last_auto_target is None
-                        or abs(target - self._last_auto_target)
-                        >= CONTROL.get("target_change_percent", 1.0)
+                        or abs(target - self._last_auto_target) >= change_thr
                     ):
                         critical = (
                             s1["wind_speed"] >= CONTROL.get("wind_crit_ms", 20.0)
-                            or s1["rain"] > CONTROL.get("rain_thr", 0.5)
+                            or s1["rain"] > rain_thr
                         )
                         self._async_loop.run_until_complete(self._auto_move_to(target, critical))
                         for vid in self.vents:
@@ -198,7 +200,7 @@ class Controller:
                     for vid, v in self.vents.items():
                         desired = v.user_target
                         safe = self._apply_safety(desired, s1, manual=True)
-                        if abs(safe - v.position) >= CONTROL.get("target_change_percent", 1.0):
+                        if abs(safe - v.position) >= change_thr:
                             self._async_loop.run_until_complete(v.move_to(safe))
                             self._save_vent_state(vid)
                 time.sleep(1.0)

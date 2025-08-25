@@ -3,53 +3,74 @@ esphome:
   platform: ESP32
   board: esp32dev
 
-wifi:
-  ssid: "LAN_FARMC"      # sieć wewnętrzna
-  password: "haslo1234"
+ethernet:
+  type: LAN8720
+  mdc_pin: GPIO23
+  mdio_pin: GPIO18
+  power_pin: GPIO5
+  phy_addr: 0
+  clock_mode: GPIO0_IN
+  manual_ip:
+    static_ip: !secret ethernet_ip
+    gateway: !secret ethernet_gateway
+    subnet: !secret ethernet_subnet
+    dns1: !secret ethernet_dns
 
 mqtt:
-  broker: 192.168.50.1   # lokalny broker (R1000/RPi)
+  broker: !secret mqtt_broker   # lokalny broker (R1000/RPi)
   topic_prefix: boneio/1
   on_message:
     # Komendy otwierania/zamykania otrzymywane z backendu
     - topic: boneio/1/cover/vent1/up
       payload: "ON"
-      then: { switch.turn_on: vent1_up }
+      then:
+        - switch.turn_on: vent1_up
     - topic: boneio/1/cover/vent1/up
       payload: "OFF"
-      then: { switch.turn_off: vent1_up }
+      then:
+        - switch.turn_off: vent1_up
     - topic: boneio/1/cover/vent1/down
       payload: "ON"
-      then: { switch.turn_on: vent1_down }
+      then:
+        - switch.turn_on: vent1_down
     - topic: boneio/1/cover/vent1/down
       payload: "OFF"
-      then: { switch.turn_off: vent1_down }
+      then:
+        - switch.turn_off: vent1_down
 
     - topic: boneio/1/cover/vent2/up
       payload: "ON"
-      then: { switch.turn_on: vent2_up }
+      then:
+        - switch.turn_on: vent2_up
     - topic: boneio/1/cover/vent2/up
       payload: "OFF"
-      then: { switch.turn_off: vent2_up }
+      then:
+        - switch.turn_off: vent2_up
     - topic: boneio/1/cover/vent2/down
       payload: "ON"
-      then: { switch.turn_on: vent2_down }
+      then:
+        - switch.turn_on: vent2_down
     - topic: boneio/1/cover/vent2/down
       payload: "OFF"
-      then: { switch.turn_off: vent2_down }
+      then:
+        - switch.turn_off: vent2_down
 
     - topic: boneio/1/cover/vent3/up
       payload: "ON"
-      then: { switch.turn_on: vent3_up }
+      then:
+        - switch.turn_on: vent3_up
     - topic: boneio/1/cover/vent3/up
       payload: "OFF"
-      then: { switch.turn_off: vent3_up }
+      then:
+        - switch.turn_off: vent3_up
     - topic: boneio/1/cover/vent3/down
       payload: "ON"
-      then: { switch.turn_on: vent3_down }
+      then:
+        - switch.turn_on: vent3_down
     - topic: boneio/1/cover/vent3/down
       payload: "OFF"
-      then: { switch.turn_off: vent3_down }
+      then:
+        - switch.turn_off: vent3_down
 
 # Przekaźniki (przykład – dostosuj do pinów BONEIO)
 switch:
@@ -57,26 +78,32 @@ switch:
     pin: GPIO16
     id: vent1_up
     name: "vent1_up"
+    interlock: [vent1_down]
   - platform: gpio
     pin: GPIO17
     id: vent1_down
     name: "vent1_down"
+    interlock: [vent1_up]
   - platform: gpio
     pin: GPIO18
     id: vent2_up
     name: "vent2_up"
+    interlock: [vent2_down]
   - platform: gpio
     pin: GPIO19
     id: vent2_down
     name: "vent2_down"
+    interlock: [vent2_up]
   - platform: gpio
     pin: GPIO21
     id: vent3_up
     name: "vent3_up"
+    interlock: [vent3_down]
   - platform: gpio
     pin: GPIO22
     id: vent3_down
     name: "vent3_down"
+    interlock: [vent3_up]
 
 binary_sensor:
   # Błąd krańcowy/awaria – ODD inputs: IN1, IN3, IN5...
@@ -84,7 +111,8 @@ binary_sensor:
     pin: GPIO32
     name: "vent1_error"
     id: vent1_error
-    filters: [invert]
+    filters:
+      - invert:
     on_press:
       - mqtt.publish:
           topic: boneio/1/in/vent1_error
@@ -98,7 +126,8 @@ binary_sensor:
     pin: GPIO33
     name: "vent2_error"
     id: vent2_error
-    filters: [invert]
+    filters:
+      - invert:
     on_press:
       - mqtt.publish:
           topic: boneio/1/in/vent2_error
@@ -112,7 +141,8 @@ binary_sensor:
     pin: GPIO25
     name: "vent3_error"
     id: vent3_error
-    filters: [invert]
+    filters:
+      - invert:
     on_press:
       - mqtt.publish:
           topic: boneio/1/in/vent3_error

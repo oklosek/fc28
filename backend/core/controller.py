@@ -20,6 +20,7 @@ class Controller:
         self._load_vents_from_config()
         self._load_state_from_db()
         self._batch_cfg = VENT_GROUPS  # sekwencje/partie otwierania
+        self._last_auto_target = None
 
     def _load_vents_from_config(self):
         for v in VENTS:
@@ -60,10 +61,21 @@ class Controller:
 
     def set_mode(self, mode: str):
         if mode not in ("auto","manual"): return
+        prev = self.mode
         self.mode = mode
         with SessionLocal() as s:
             s.merge(RuntimeState(key="mode", value=self.mode)); s.commit()
             s.add(EventLog(level="INFO", event="MODE_CHANGE", meta={"mode": self.mode})); s.commit()
+        if prev != mode:
+            if mode == "manual":
+                # zatrzymaj wszystkie ruchy
+                async def _stop_all():
+                    await asyncio.gather(*[v.stop() for v in self.vents.values()])
+                if self._async_loop:
+                    asyncio.run_coroutine_threadsafe(_stop_all(), self._async_loop)
+            else:
+                self._last_auto_target = None
+                self.calibrate_all()
 
     def _compute_auto_target(self, s: dict) -> float:
         target_temp = CONTROL.get("target_temp_c", 25.0)
@@ -85,9 +97,10 @@ class Controller:
         crit = CONTROL.get("wind_crit_ms", 20.0)
         lim  = CONTROL.get("risk_open_limit_percent", 50.0)
         rain = s["rain"] > 0.5
-        # krytyk: zamknij; wyjątek wilgotności -> 10%
+        allow_override = CONTROL.get("allow_humidity_override", False)
+        # krytyk: domyślnie zamknij wszystko; opcjonalna szczelina przy wilgotności
         if s["wind_speed"] >= crit or rain:
-            if s["internal_hum"] > CONTROL.get("humidity_thr", 70.0):
+            if allow_override and s["internal_hum"] > CONTROL.get("humidity_thr", 70.0):
                 return CONTROL.get("crit_hum_crack_percent", 10.0)
             return 0.0
         # ryzykowny wiatr: ogranicz max
@@ -97,16 +110,42 @@ class Controller:
 
     async def _move_in_batches(self, target_pct: float):
         """Otwieranie partiami wg VENT_GROUPS: np. najpierw 6 dachowych, potem boczne itd."""
+        delay_default = CONTROL.get("group_delay_s", 5)
         if not self._batch_cfg:
-            # brak grup – steruj wszystkim naraz
             await asyncio.gather(*[self.vents[v].move_to(target_pct) for v in self.vents])
             return
         for group in self._batch_cfg:
             ids: List[int] = group["vents"]
-            delay_s = group.get("delay_s", 0)
+            delay_s = group.get("delay_s", delay_default)
             await asyncio.gather(*[self.vents[vid].move_to(target_pct) for vid in ids if vid in self.vents])
             if delay_s > 0:
                 await asyncio.sleep(delay_s)
+
+    async def _auto_move_to(self, target_pct: float, critical: bool):
+        if critical:
+            await self._move_in_batches(target_pct)
+            return
+        step = CONTROL.get("step_percent", 10.0)
+        delay = CONTROL.get("step_delay_s", 10.0)
+        start = self._last_auto_target
+        if start is None:
+            if self.vents:
+                start = sum(v.position for v in self.vents.values()) / len(self.vents)
+            else:
+                start = 0.0
+        current = start
+        if target_pct > current:
+            while current < target_pct - 0.5:
+                current = min(current + step, target_pct)
+                await self._move_in_batches(current)
+                if current != target_pct:
+                    await asyncio.sleep(delay)
+        else:
+            while current > target_pct + 0.5:
+                current = max(current - step, target_pct)
+                await self._move_in_batches(current)
+                if current != target_pct:
+                    await asyncio.sleep(delay)
 
     def _save_vent_state(self, vid: int):
         v = self.vents[vid]
@@ -121,7 +160,6 @@ class Controller:
     def _loop(self):
         self._async_loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._async_loop)
-        last_auto_target = None
         while self._running:
             try:
                 # zbierz średnie: z MQTT i RS485 (łączymy – preferuj RS485 jeśli skonfigurowany)
@@ -140,12 +178,13 @@ class Controller:
                 if self.mode == "auto":
                     base = self._compute_auto_target(s1)
                     target = self._apply_safety(base, s1, manual=False)
-                    if last_auto_target is None or abs(target - last_auto_target) >= 1.0:
-                        self._async_loop.run_until_complete(self._move_in_batches(target))
+                    if self._last_auto_target is None or abs(target - self._last_auto_target) >= 1.0:
+                        critical = s1["wind_speed"] >= CONTROL.get("wind_crit_ms", 20.0) or s1["rain"] > 0.5
+                        self._async_loop.run_until_complete(self._auto_move_to(target, critical))
                         for vid in self.vents:
                             self.vents[vid].user_target = target
                             self._save_vent_state(vid)
-                        last_auto_target = target
+                        self._last_auto_target = target
                 else:
                     # manual – tylko bezpieczeństwo
                     for vid, v in self.vents.items():
@@ -162,9 +201,14 @@ class Controller:
     # API akcji
     def manual_set_all(self, pct: float):
         self.set_mode("manual")
-        for v in self.vents.values():
-            if v.available:
-                v.user_target = pct
+        async def _move():
+            await self._move_in_batches(pct)
+            for v in self.vents.values():
+                if v.available:
+                    v.user_target = pct
+                    self._save_vent_state(v.id)
+        if self._async_loop:
+            asyncio.run_coroutine_threadsafe(_move(), self._async_loop)
         return True
 
     def manual_set_one(self, vent_id: int, pct: float):
@@ -188,3 +232,9 @@ class Controller:
                     self._save_vent_state(v.id)
         if self._async_loop:
             asyncio.run_coroutine_threadsafe(_cal(), self._async_loop)
+
+    def update_config(self, control: dict | None = None, vent_groups: List[dict] | None = None):
+        if control:
+            CONTROL.update(control)
+        if vent_groups is not None:
+            self._batch_cfg = vent_groups

@@ -1,5 +1,7 @@
 # config/settings.yaml – centralna konfiguracja systemu
 control:
+  controller_loop_s: 1
+  scheduler_loop_s: 1
   target_temp_c: 25
   humidity_thr: 70
   wind_risk_ms: 10

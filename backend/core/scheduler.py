@@ -33,4 +33,4 @@ class Scheduler:
                 if prev_cal_day != now.date():
                     self.controller.calibrate_all()
                     prev_cal_day = now.date()
-            time.sleep(1)
+            time.sleep(CONTROL.get("scheduler_loop_s", 1.0))

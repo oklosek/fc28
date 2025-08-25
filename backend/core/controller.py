@@ -193,10 +193,10 @@ class Controller:
                         if abs(safe - v.position) >= 1.0:
                             self._async_loop.run_until_complete(v.move_to(safe))
                             self._save_vent_state(vid)
-                time.sleep(1.0)
+                time.sleep(CONTROL.get("controller_loop_s", 1.0))
             except Exception as e:
                 print("Controller loop error:", e)
-                time.sleep(1.0)
+                time.sleep(CONTROL.get("controller_loop_s", 1.0))
 
     # API akcji
     def manual_set_all(self, pct: float):

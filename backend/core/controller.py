@@ -139,14 +139,15 @@ class Controller:
             else:
                 start = 0.0
         current = start
+        tolerance = CONTROL.get("movement_tolerance_percent", 0.5)
         if target_pct > current:
-            while current < target_pct - 0.5:
+            while current < target_pct - tolerance:
                 current = min(current + step, target_pct)
                 await self._move_in_batches(current)
                 if current != target_pct:
                     await asyncio.sleep(delay)
         else:
-            while current > target_pct + 0.5:
+            while current > target_pct + tolerance:
                 current = max(current - step, target_pct)
                 await self._move_in_batches(current)
                 if current != target_pct:
@@ -179,11 +180,12 @@ class Controller:
                 # merge – jeśli RS485 wartość != 0 to przyjmij RS485 jako bardziej wiarygodny
                 for k in s1:
                     if s2.get(k, 0) > 0: s1[k] = s2[k]
+                change = CONTROL.get("target_change_percent", 1.0)
                 # tryb
                 if self.mode == "auto":
                     base = self._compute_auto_target(s1)
                     target = self._apply_safety(base, s1, manual=False)
-                    if self._last_auto_target is None or abs(target - self._last_auto_target) >= 1.0:
+                    if self._last_auto_target is None or abs(target - self._last_auto_target) >= change:
                         critical = s1["wind_speed"] >= CONTROL.get("wind_crit_ms", 20.0) or s1["rain"] > CONTROL.get("rain_threshold", 0.5)
                         self._async_loop.run_until_complete(self._auto_move_to(target, critical))
                         for vid in self.vents:
@@ -195,7 +197,7 @@ class Controller:
                     for vid, v in self.vents.items():
                         desired = v.user_target
                         safe = self._apply_safety(desired, s1, manual=True)
-                        if abs(safe - v.position) >= 1.0:
+                        if abs(safe - v.position) >= change:
                             self._async_loop.run_until_complete(v.move_to(safe))
                             self._save_vent_state(vid)
                 time.sleep(CONTROL.get("controller_loop_s", 1.0))

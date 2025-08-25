@@ -62,5 +62,7 @@ SENSORS = yaml_cfg.get("sensors", {})                       # mapowanie czujnik√
 RS485_BUSES = yaml_cfg.get("rs485_buses", [])               # dwie magistrale
 CONTROL = yaml_cfg.get("control", {})                       # progi, czasy itp.
 CONTROL.setdefault("temp_diff_percent", 5.0)
+CONTROL.setdefault("movement_tolerance_percent", 0.5)
+CONTROL.setdefault("target_change_percent", 1.0)
 SECURITY = yaml_cfg.get("security", {})                     # polityka WAN/LAN
 AVG_WINDOW_S = yaml_cfg.get("sensor_avg_window_s", 5)

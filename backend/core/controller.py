@@ -97,7 +97,7 @@ class Controller:
         risk = CONTROL.get("wind_risk_ms", 10.0)
         crit = CONTROL.get("wind_crit_ms", 20.0)
         lim  = CONTROL.get("risk_open_limit_percent", 50.0)
-        rain = s["rain"] > 0.5
+        rain = s["rain"] > CONTROL.get("rain_threshold", 0.5)
         allow_override = CONTROL.get("allow_humidity_override", False)
         # krytyk: domyślnie zamknij wszystko; opcjonalna szczelina przy wilgotności
         if s["wind_speed"] >= crit or rain:
@@ -180,7 +180,7 @@ class Controller:
                     base = self._compute_auto_target(s1)
                     target = self._apply_safety(base, s1, manual=False)
                     if self._last_auto_target is None or abs(target - self._last_auto_target) >= 1.0:
-                        critical = s1["wind_speed"] >= CONTROL.get("wind_crit_ms", 20.0) or s1["rain"] > 0.5
+                        critical = s1["wind_speed"] >= CONTROL.get("wind_crit_ms", 20.0) or s1["rain"] > CONTROL.get("rain_threshold", 0.5)
                         self._async_loop.run_until_complete(self._auto_move_to(target, critical))
                         for vid in self.vents:
                             self.vents[vid].user_target = target

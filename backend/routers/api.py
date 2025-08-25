@@ -50,4 +50,3 @@ def set_one(vent_id: int, p=Body(...)):
 def update_binary(auth=Depends(require_admin)):
     # W realu: przyjmij upload (multipart) i uruchom scripts/update_from_zip.sh
     return {"ok": True, "msg": "Endpoint placeholder – przygotowany do uploadu i restartu."}
-q

@@ -57,6 +57,7 @@ yaml_cfg = load_yaml_settings(settings.settings_yaml)
 VENT_GROUPS = yaml_cfg.get("vent_groups", [])               # partie/sekwencje
 VENTS = yaml_cfg.get("vents", [])                           # wszystkie wietrzniki (dynamicznie)
 BONEIOS = yaml_cfg.get("boneio_devices", [])                # mapowanie kanałów
+VENT_DEFAULTS = yaml_cfg.get("vent_defaults", {})           # domyślne parametry wietrzników
 SENSORS = yaml_cfg.get("sensors", {})                       # mapowanie czujników
 RS485_BUSES = yaml_cfg.get("rs485_buses", [])               # dwie magistrale
 CONTROL = yaml_cfg.get("control", {})                       # progi, czasy itp.

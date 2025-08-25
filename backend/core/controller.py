@@ -3,7 +3,7 @@
 import asyncio, threading, time
 from typing import Dict, List
 from sqlalchemy.orm import Session
-from backend.core.config import VENTS, CONTROL, VENT_GROUPS
+from backend.core.config import VENTS, CONTROL, VENT_GROUPS, VENT_DEFAULTS
 from backend.core.db import SessionLocal, VentState, EventLog, RuntimeState
 from backend.core.mqtt_client import sensor_bus
 from backend.core.rs485 import RS485Manager
@@ -32,6 +32,10 @@ class Controller:
                 up_topic=v["topics"]["up"],
                 down_topic=v["topics"]["down"],
                 err_input_topic=v["topics"].get("error_in"),
+                reverse_pause_s=v.get("reverse_pause_s", VENT_DEFAULTS.get("reverse_pause_s", 1.0)),
+                min_move_s=v.get("min_move_s", VENT_DEFAULTS.get("min_move_s", 0.5)),
+                calibration_buffer_s=v.get("calibration_buffer_s", VENT_DEFAULTS.get("calibration_buffer_s", 0.5)),
+                ignore_delta_percent=v.get("ignore_delta_percent", VENT_DEFAULTS.get("ignore_delta_percent", 0.5)),
             )
             self.vents[vent.id] = vent
 

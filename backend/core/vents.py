@@ -9,7 +9,9 @@ class Vent:
     """
     def __init__(self, vid: int, name: str, travel_time_s: float,
                  boneio_device: str, up_topic: str, down_topic: str,
-                 err_input_topic: str | None):
+                 err_input_topic: str | None,
+                 reverse_pause_s: float, min_move_s: float,
+                 calibration_buffer_s: float, ignore_delta_percent: float):
         self.id = vid
         self.name = name
         self.travel_time = travel_time_s
@@ -17,6 +19,10 @@ class Vent:
         self.up_topic = up_topic
         self.down_topic = down_topic
         self.err_input_topic = err_input_topic
+        self.reverse_pause_s = reverse_pause_s
+        self.min_move_s = min_move_s
+        self.calibration_buffer_s = calibration_buffer_s
+        self.ignore_delta_percent = ignore_delta_percent
         self.position = 0.0
         self.user_target = 0.0
         self.available = True
@@ -33,17 +39,17 @@ class Vent:
     async def move_to(self, target_percent: float):
         if not self.available: return
         target = max(0.0, min(100.0, float(target_percent)))
-        if abs(target - self.position) < 0.5:
+        if abs(target - self.position) < self.ignore_delta_percent:
             return
         # Kierunek
         direction = 1 if target > self.position else -1
         # Zmiana kierunku -> 1s pauzy
         if self._last_dir != 0 and self._last_dir != direction:
             await self.stop()
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(self.reverse_pause_s)
         # Czas ruchu
         delta = abs(target - self.position) / 100.0
-        move_time = max(0.5, delta * self.travel_time)
+        move_time = max(self.min_move_s, delta * self.travel_time)
         # Publikacja MQTT
         if direction > 0:
             await mqtt_publish(self.down_topic, "OFF")
@@ -62,9 +68,9 @@ class Vent:
         """Domknięcie do 0% przez pełny travel_time."""
         if not self.available: return
         if self._last_dir == 1:
-            await self.stop(); await asyncio.sleep(1.0)
+            await self.stop(); await asyncio.sleep(self.reverse_pause_s)
         await mqtt_publish(self.up_topic, "OFF")
         await mqtt_publish(self.down_topic, "ON")
-        await asyncio.sleep(self.travel_time + 0.5)
+        await asyncio.sleep(self.travel_time + self.calibration_buffer_s)
         await self.stop()
         self.position = 0.0

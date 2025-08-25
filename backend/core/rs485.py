@@ -1,11 +1,22 @@
 # -*- coding: utf-8 -*-
 # backend/core/rs485.py – odczyt z dwóch magistral RS485 (np. Modbus RTU) + uśrednianie
 import asyncio
+import minimalmodbus
 from backend.core.config import RS485_BUSES
 from backend.core.models import SensorSnapshot
 
-# Uwaga: w realu użyj minimalmodbus/pymodbus; tu pokazuję szkic z pseudo-odczytem
-# aby kod działał nawet bez sprzętu. W settings.yaml wskazujesz porty i rejestry.
+"""Odczyt danych z magistrali RS485.
+
+W praktycznym zastosowaniu wykorzystywana jest biblioteka ``minimalmodbus`` do
+komunikacji z urządzeniami Modbus RTU. W pliku ``settings.yaml`` znajdują się
+informacje o dostępnych magistralach oraz rejestrach poszczególnych czujników.
+
+Każdy obiekt :class:`RS485Bus` odpowiada jednej magistrali i przechowuje listę
+czujników do odczytu. Metoda :meth:`RS485Bus.read_all` iteruje po tej liście,
+otwierając port szeregowy dla każdego czujnika i próbując odczytać wskazany
+rejestr. W przypadku błędów komunikacyjnych zwracana jest ostatnia poprawna
+wartość (jeśli dostępna) lub ``None``.
+"""
 
 class RS485Bus:
     def __init__(self, name, port, baudrate, sensors):
@@ -13,13 +24,34 @@ class RS485Bus:
         self.port = port
         self.baudrate = baudrate
         self.sensors = sensors  # lista czujników na tej magistrali
+        # przechowywanie ostatnich poprawnych wartości poszczególnych czujników
+        self._last_values: dict[str, float] = {}
+
     async def read_all(self) -> dict:
-        # TODO: zastąp poniższy mock prawdziwymi odczytami RTU
-        # np. minimalmodbus.Instrument('/dev/ttyS0', slave_id).read_register(reg, 1)
-        # Zwróć dict { "internal_temp": 23.4, ... } dla dopiętych czujników
+        """Odczytaj wszystkie zdefiniowane czujniki.
+
+        Dla każdego czujnika tworzony jest obiekt :class:`minimalmodbus.Instrument`
+        i wykonywany jest odczyt z podanego rejestru. Wynik konwertowany jest na
+        ``float``. W przypadku wystąpienia błędów komunikacyjnych zwracana jest
+        ostatnia poprawna wartość (jeśli istnieje) lub ``None``.
+        """
+
         result = {}
+
         for s in self.sensors:
-            result[s["map_to"]] = 0.0  # domyślnie
+            map_key = s["map_to"]
+            try:
+                instrument = minimalmodbus.Instrument(self.port, s["slave"])
+                instrument.serial.baudrate = self.baudrate
+                instrument.mode = minimalmodbus.MODE_RTU
+                # odczyt rejestru i konwersja na float
+                value = float(instrument.read_register(s["reg"], 1))
+                self._last_values[map_key] = value
+                result[map_key] = value
+            except (minimalmodbus.ModbusException, OSError):
+                # błędy komunikacji: timeouty, CRC itp.
+                result[map_key] = self._last_values.get(map_key)
+
         return result
 
 class RS485Manager:

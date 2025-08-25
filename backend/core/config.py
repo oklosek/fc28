@@ -1,7 +1,17 @@
 # -*- coding: utf-8 -*-
 # backend/core/config.py â€“ konfiguracja aplikacji + settings.yaml
-import os, yaml
-from pydantic import BaseSettings
+import os
+try:
+    import yaml
+except Exception:  # pragma: no cover
+    yaml = None
+try:
+    from pydantic import BaseSettings
+except Exception:  # pragma: no cover
+    class BaseSettings:
+        def __init__(self, **kwargs):
+            for k, v in kwargs.items():
+                setattr(self, k, v)
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -31,6 +41,8 @@ class Settings(BaseSettings):
         env_file = CONFIG_DIR / ".env"
 
 def load_yaml_settings(path: str):
+    if yaml is None:
+        return {}
     with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
@@ -49,3 +61,4 @@ SENSORS = yaml_cfg.get("sensors", {})                       # mapowanie czujnikÃ
 RS485_BUSES = yaml_cfg.get("rs485_buses", [])               # dwie magistrale
 CONTROL = yaml_cfg.get("control", {})                       # progi, czasy itp.
 SECURITY = yaml_cfg.get("security", {})                     # polityka WAN/LAN
+AVG_WINDOW_S = yaml_cfg.get("sensor_avg_window_s", 5)

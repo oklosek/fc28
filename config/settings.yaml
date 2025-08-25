@@ -9,6 +9,12 @@ control:
   crit_hum_crack_percent: 10
   flush_hour: 12
   calibration_hour: 0
+  allow_humidity_override: false
+  step_percent: 10
+  step_delay_s: 10
+  group_delay_s: 5
+
+sensor_avg_window_s: 5
 
 # Dwóch RS485: oddzielnie dla czujników wewn. i zewn.
 rs485_buses:

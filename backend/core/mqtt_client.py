@@ -2,13 +2,26 @@
 # backend/core/mqtt_client.py – MQTT (asyncio-mqtt)
 import asyncio, json
 from contextlib import AsyncExitStack
-from asyncio_mqtt import Client, MqttError
-from backend.core.config import settings, SENSORS, VENTS
+try:
+    from asyncio_mqtt import Client, MqttError
+except Exception:  # pragma: no cover - brak biblioteki w środowisku testowym
+    Client = MqttError = None
+from backend.core.config import settings, SENSORS, VENTS, AVG_WINDOW_S
 from backend.core.models import SensorSnapshot
-from backend.core.db import SessionLocal, SensorLog
-from sqlalchemy.orm import Session
+try:
+    from backend.core.db import SessionLocal, SensorLog
+    from sqlalchemy.orm import Session
+except Exception:  # pragma: no cover - brak bazy w testach
+    SessionLocal = None
+    Session = None
+    SensorLog = None
 
 sensor_bus = SensorSnapshot()
+sensor_bus.set_window(AVG_WINDOW_S)
+
+def set_avg_window(window: int):
+    """Ustaw nowe okno uśredniania dla wszystkich czujników."""
+    sensor_bus.set_window(window)
 
 # Mapowanie tematów MQTT -> pola w sensor_bus
 TOPIC_MAP = {
@@ -25,6 +38,8 @@ VENT_AVAIL_TOPICS = [f'farmcare/vents/{v["id"]}/available' for v in VENTS]
 VENT_ERROR_TOPIC_MAP = {v["topics"].get("error_in"): v["id"] for v in VENTS if v["topics"].get("error_in")}
 
 async def _handle_messages():
+    if Client is None:
+        return
     async with AsyncExitStack() as stack:
         client = Client(settings.MQTT_HOST, port=settings.MQTT_PORT,
                         username=settings.MQTT_USERNAME or None,
@@ -44,10 +59,11 @@ async def _handle_messages():
                         name = TOPIC_MAP[topic]
                         val = 1.0 if payload in ("true","True","1") else float(payload)
                         getattr(sensor_bus, name).add(val)
-                        # log do bazy (co przyjście), lekkie – można dodać filtr zmian
-                        with SessionLocal() as s:  # type: Session
-                            s.add(SensorLog(name=name, value=val))
-                            s.commit()
+                        if SessionLocal and SensorLog:
+                            # log do bazy (co przyjście), lekkie – można dodać filtr zmian
+                            with SessionLocal() as s:  # type: Session
+                                s.add(SensorLog(name=name, value=val))
+                                s.commit()
                     elif topic in VENT_ERROR_TOPIC_MAP:
                         vid = VENT_ERROR_TOPIC_MAP[topic]
                         state = payload not in ("0", "false", "False", "OFF")
@@ -66,6 +82,8 @@ async def mqtt_start():
 
 # Publikacje sterujące do BONEIO
 async def mqtt_publish(topic: str, payload: str):
+    if Client is None:
+        return
     try:
         async with Client(settings.MQTT_HOST, port=settings.MQTT_PORT,
                           username=settings.MQTT_USERNAME or None,

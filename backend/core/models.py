@@ -14,6 +14,13 @@ class SensorAverager:
         if not self.q: return 0.0
         return sum(self.q) / len(self.q)
 
+    # pozwala dynamicznie zmienić okno uśredniania
+    def set_window(self, window: int):
+        window = max(1, int(window))
+        self.window = window
+        # przycięcie istniejących próbek do nowego rozmiaru
+        self.q = deque(list(self.q)[-window:], maxlen=window)
+
 @dataclass
 class SensorSnapshot:
     internal_temp: SensorAverager = field(default_factory=SensorAverager)
@@ -21,3 +28,7 @@ class SensorSnapshot:
     internal_hum:  SensorAverager = field(default_factory=SensorAverager)
     wind_speed:    SensorAverager = field(default_factory=SensorAverager)
     rain:          SensorAverager = field(default_factory=SensorAverager)
+
+    def set_window(self, window: int):
+        for name in self.__dataclass_fields__:
+            getattr(self, name).set_window(window)

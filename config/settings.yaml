@@ -4,6 +4,7 @@ control:
   humidity_thr: 70
   wind_risk_ms: 10
   wind_crit_ms: 20
+  rain_thr: 0.5
   risk_open_limit_percent: 50
   min_open_hum_percent: 20
   crit_hum_crack_percent: 10

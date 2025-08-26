@@ -39,6 +39,8 @@ Projekt składa się z backendu FastAPI, prostego frontendu oraz zestawu skrypt�
 
 ## Konfiguracja
 - Główny plik konfiguracyjny: `config/settings.yaml` – parametry sterowania, mapowanie czujników, definicje wietrzników, grupy oraz opcje bezpieczeństwa
+- W sekcji `rs485_buses` każdy czujnik może opcjonalnie określić `scale` i `offset`,
+  które przeskalowują surowy odczyt zgodnie ze wzorem `value*scale + offset`
 - Przykładowe definicje urządzeń BoneIO do wgrania w ESPHome: katalog `boneio/`
 - Dodatkowe pliki usług/systemd i Nginx znajdują się w katalogu `deploy/`
 

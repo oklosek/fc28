@@ -25,6 +25,7 @@ rs485_buses:
   - name: "internal_bus"
     port: "/dev/ttyUSB0"
     baudrate: 9600
+    timeout: 0.2
     sensors:
       # przykładowe mapowanie (slave,id,register)-> map_to
       # opcjonalnie scale i offset skalują odczyt: value*scale + offset
@@ -33,6 +34,7 @@ rs485_buses:
   - name: "external_bus"
     port: "/dev/ttyUSB1"
     baudrate: 9600
+    timeout: 0.2
     sensors:
       - { slave: 2, reg: 30001, map_to: "external_temp", scale: 1, offset: 0 }
       - { slave: 2, reg: 30002, map_to: "wind_speed",   scale: 1, offset: 0 }

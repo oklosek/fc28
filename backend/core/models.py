@@ -32,3 +32,13 @@ class SensorSnapshot:
     def set_window(self, window: int):
         for name in self.__dataclass_fields__:
             getattr(self, name).set_window(window)
+
+    def set_windows(self, windows: dict[str, int]):
+        """Ustawia okna uśredniania dla wybranych pól.
+
+        Parametr ``windows`` to mapa ``nazwa_pola -> rozmiar_okna``.
+        Pola nieobecne w mapie zachowują dotychczasowe ustawienia.
+        """
+        for name, window in windows.items():
+            if name in self.__dataclass_fields__:
+                getattr(self, name).set_window(window)

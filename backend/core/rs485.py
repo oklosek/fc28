@@ -20,10 +20,11 @@ rejestr. W przypadku błędów komunikacyjnych zwracana jest ``None``.
 """
 
 class RS485Bus:
-    def __init__(self, name, port, baudrate, sensors):
+    def __init__(self, name, port, baudrate, sensors, timeout=0.2):
         self.name = name
         self.port = port
         self.baudrate = baudrate
+        self.timeout = timeout
         self.sensors = sensors  # lista czujników na tej magistrali
         self.errors = 0
         self.available = True
@@ -45,9 +46,14 @@ class RS485Bus:
             try:
                 instrument = minimalmodbus.Instrument(self.port, s["slave"])
                 instrument.serial.baudrate = self.baudrate
+                instrument.serial.timeout = self.timeout
                 instrument.mode = minimalmodbus.MODE_RTU
-                # odczyt rejestru i konwersja na float
-                value = float(instrument.read_register(s["reg"], 1))
+
+                def _read():
+                    return instrument.read_register(s["reg"], 1)
+
+                # odczyt rejestru i konwersja na float w wątku
+                value = float(await asyncio.to_thread(_read))
                 value = value * s.get("scale", 1) + s.get("offset", 0)
                 result[map_key] = value
             except (minimalmodbus.ModbusException, OSError):

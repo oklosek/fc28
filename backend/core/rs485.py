@@ -51,6 +51,7 @@ class RS485Bus:
                 instrument.mode = minimalmodbus.MODE_RTU
                 # odczyt rejestru i konwersja na float
                 value = float(instrument.read_register(s["reg"], 1))
+                value = value * s.get("scale", 1) + s.get("offset", 0)
                 self._last_values[map_key] = value
                 result[map_key] = value
             except (minimalmodbus.ModbusException, OSError):

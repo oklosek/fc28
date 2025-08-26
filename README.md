@@ -12,7 +12,7 @@ Projekt składa się z backendu FastAPI, prostego frontendu oraz zestawu skrypt�
 - Skrypt do konfiguracji dwóch interfejsów sieciowych (WAN/LAN) wraz z zaporą iptables
 
 ## Wymagania
-- Python 3.11+
+- Python 3.11
 - Zależności: `fastapi`, `uvicorn`, `sqlalchemy`, `pydantic`, `asyncio-mqtt`, `pyyaml`
 - Broker MQTT (np. `mosquitto`)
 - Opcjonalnie: środowisko wirtualne (`python -m venv .venv`)

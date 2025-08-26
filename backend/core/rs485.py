@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 # backend/core/rs485.py – odczyt z dwóch magistral RS485 (np. Modbus RTU) + uśrednianie
 import asyncio
+import logging
+import time
 import minimalmodbus
 from backend.core.config import RS485_BUSES
 from backend.core.models import SensorSnapshot
@@ -26,6 +28,9 @@ class RS485Bus:
         self.sensors = sensors  # lista czujników na tej magistrali
         # przechowywanie ostatnich poprawnych wartości poszczególnych czujników
         self._last_values: dict[str, float] = {}
+        self.errors = 0
+        self.available = True
+        self.next_retry = 0.0
 
     async def read_all(self) -> dict:
         """Odczytaj wszystkie zdefiniowane czujniki.
@@ -61,6 +66,11 @@ class RS485Manager:
         self._task = None
         self.running = False
 
+        # konfiguracja obsługi błędów magistrali
+        self.RETRY_DELAY = 0.5
+        self.MAX_ERRORS = 3
+        self.REINIT_INTERVAL = 30.0
+
     async def start(self):
         self.running = True
         self._task = asyncio.create_task(self._loop())
@@ -79,10 +89,36 @@ class RS485Manager:
         while self.running:
             # zbierz odczyty z obu magistral i uśrednij
             for bus in self.buses:
-                vals = await bus.read_all()
-                for k, v in vals.items():
-                    getattr(self.snapshot, k).add(v)
+                if not bus.available:
+                    if time.monotonic() < bus.next_retry:
+                        continue
+                    bus.available = True
+                    bus.errors = 0
+                try:
+                    vals = await self._read_with_retry(bus)
+                except Exception:
+                    bus.errors += 1
+                    if bus.errors >= self.MAX_ERRORS:
+                        bus.available = False
+                        bus.next_retry = time.monotonic() + self.REINIT_INTERVAL
+                    continue
+                else:
+                    bus.errors = 0
+                    for k, v in vals.items():
+                        getattr(self.snapshot, k).add(v)
             await asyncio.sleep(1.0)
+
+    async def _read_with_retry(self, bus):
+        try:
+            return await bus.read_all()
+        except Exception as e:
+            logging.warning("RS485 bus %s read error: %s", bus.name, e)
+            await asyncio.sleep(self.RETRY_DELAY)
+            try:
+                return await bus.read_all()
+            except Exception as e:
+                logging.warning("RS485 bus %s retry error: %s", bus.name, e)
+                raise
 
     def averages(self) -> dict:
         return {

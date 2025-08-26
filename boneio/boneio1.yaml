@@ -1,6 +1,7 @@
 esphome:
   name: boneio1
-  platform: ESP32
+
+esp32:
   board: esp32dev
 
 ethernet:
@@ -9,7 +10,7 @@ ethernet:
   mdio_pin: GPIO18
   power_pin: GPIO5
   phy_addr: 0
-  clock_mode: GPIO0_IN
+  clk_mode: GPIO0_IN
   manual_ip:
     static_ip: !secret ethernet_ip
     gateway: !secret ethernet_gateway
@@ -21,56 +22,57 @@ mqtt:
   topic_prefix: boneio/1
   on_message:
     # Komendy otwierania/zamykania otrzymywane z backendu
-    - topic: boneio/1/cover/vent1/up
-      payload: "ON"
+    # Jedna definicja obsługuje parę tematów UP/DOWN dzięki skryptowi handle_cover_command
+    - topic: boneio/1/cover/vent1/+
       then:
-        - switch.turn_on: vent1_up
-    - topic: boneio/1/cover/vent1/up
-      payload: "OFF"
-      then:
-        - switch.turn_off: vent1_up
-    - topic: boneio/1/cover/vent1/down
-      payload: "ON"
-      then:
-        - switch.turn_on: vent1_down
-    - topic: boneio/1/cover/vent1/down
-      payload: "OFF"
-      then:
-        - switch.turn_off: vent1_down
+        - script.execute:
+            id: handle_cover_command
+            up_switch: vent1_up
+            down_switch: vent1_down
+            direction: !lambda 'return topic.substr(topic.find_last_of("/") + 1);'
+            state: !lambda 'return payload == "ON";'
 
-    - topic: boneio/1/cover/vent2/up
-      payload: "ON"
+    - topic: boneio/1/cover/vent2/+
       then:
-        - switch.turn_on: vent2_up
-    - topic: boneio/1/cover/vent2/up
-      payload: "OFF"
-      then:
-        - switch.turn_off: vent2_up
-    - topic: boneio/1/cover/vent2/down
-      payload: "ON"
-      then:
-        - switch.turn_on: vent2_down
-    - topic: boneio/1/cover/vent2/down
-      payload: "OFF"
-      then:
-        - switch.turn_off: vent2_down
+        - script.execute:
+            id: handle_cover_command
+            up_switch: vent2_up
+            down_switch: vent2_down
+            direction: !lambda 'return topic.substr(topic.find_last_of("/") + 1);'
+            state: !lambda 'return payload == "ON";'
 
-    - topic: boneio/1/cover/vent3/up
-      payload: "ON"
+    - topic: boneio/1/cover/vent3/+
       then:
-        - switch.turn_on: vent3_up
-    - topic: boneio/1/cover/vent3/up
-      payload: "OFF"
-      then:
-        - switch.turn_off: vent3_up
-    - topic: boneio/1/cover/vent3/down
-      payload: "ON"
-      then:
-        - switch.turn_on: vent3_down
-    - topic: boneio/1/cover/vent3/down
-      payload: "OFF"
-      then:
-        - switch.turn_off: vent3_down
+        - script.execute:
+            id: handle_cover_command
+            up_switch: vent3_up
+            down_switch: vent3_down
+            direction: !lambda 'return topic.substr(topic.find_last_of("/") + 1);'
+            state: !lambda 'return payload == "ON";'
+
+# Skrypt obsługuje pary tematów UP/DOWN dla wietrzników
+script:
+  - id: handle_cover_command
+    parameters:
+      up_switch: switch
+      down_switch: switch
+      direction: string
+      state: bool
+    then:
+      - lambda: |-
+          if (direction == "up") {
+            if (state) {
+              up_switch->turn_on();
+            } else {
+              up_switch->turn_off();
+            }
+          } else {
+            if (state) {
+              down_switch->turn_on();
+            } else {
+              down_switch->turn_off();
+            }
+          }
 
 # Przekaźniki (przykład – dostosuj do pinów BONEIO)
 switch:

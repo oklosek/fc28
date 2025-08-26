@@ -16,8 +16,7 @@ informacje o dostępnych magistralach oraz rejestrach poszczególnych czujników
 Każdy obiekt :class:`RS485Bus` odpowiada jednej magistrali i przechowuje listę
 czujników do odczytu. Metoda :meth:`RS485Bus.read_all` iteruje po tej liście,
 otwierając port szeregowy dla każdego czujnika i próbując odczytać wskazany
-rejestr. W przypadku błędów komunikacyjnych zwracana jest ostatnia poprawna
-wartość (jeśli dostępna) lub ``None``.
+rejestr. W przypadku błędów komunikacyjnych zwracana jest ``None``.
 """
 
 class RS485Bus:
@@ -26,8 +25,6 @@ class RS485Bus:
         self.port = port
         self.baudrate = baudrate
         self.sensors = sensors  # lista czujników na tej magistrali
-        # przechowywanie ostatnich poprawnych wartości poszczególnych czujników
-        self._last_values: dict[str, float] = {}
         self.errors = 0
         self.available = True
         self.next_retry = 0.0
@@ -38,7 +35,7 @@ class RS485Bus:
         Dla każdego czujnika tworzony jest obiekt :class:`minimalmodbus.Instrument`
         i wykonywany jest odczyt z podanego rejestru. Wynik konwertowany jest na
         ``float``. W przypadku wystąpienia błędów komunikacyjnych zwracana jest
-        ostatnia poprawna wartość (jeśli istnieje) lub ``None``.
+        ``None``.
         """
 
         result = {}
@@ -52,11 +49,10 @@ class RS485Bus:
                 # odczyt rejestru i konwersja na float
                 value = float(instrument.read_register(s["reg"], 1))
                 value = value * s.get("scale", 1) + s.get("offset", 0)
-                self._last_values[map_key] = value
                 result[map_key] = value
             except (minimalmodbus.ModbusException, OSError):
                 # błędy komunikacji: timeouty, CRC itp.
-                result[map_key] = self._last_values.get(map_key)
+                result[map_key] = None
 
         return result
 
@@ -106,7 +102,8 @@ class RS485Manager:
                 else:
                     bus.errors = 0
                     for k, v in vals.items():
-                        getattr(self.snapshot, k).add(v)
+                        if v is not None:
+                            getattr(self.snapshot, k).add(v)
             await asyncio.sleep(1.0)
 
     async def _read_with_retry(self, bus):
@@ -122,10 +119,13 @@ class RS485Manager:
                 raise
 
     def averages(self) -> dict:
+        def _avg_or_none(av):
+            return av.avg() if av.q else None
+
         return {
-            "internal_temp": self.snapshot.internal_temp.avg(),
-            "external_temp": self.snapshot.external_temp.avg(),
-            "internal_hum":  self.snapshot.internal_hum.avg(),
-            "wind_speed":    self.snapshot.wind_speed.avg(),
-            "rain":          self.snapshot.rain.avg(),
+            "internal_temp": _avg_or_none(self.snapshot.internal_temp),
+            "external_temp": _avg_or_none(self.snapshot.external_temp),
+            "internal_hum":  _avg_or_none(self.snapshot.internal_hum),
+            "wind_speed":    _avg_or_none(self.snapshot.wind_speed),
+            "rain":          _avg_or_none(self.snapshot.rain),
         }

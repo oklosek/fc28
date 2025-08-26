@@ -19,18 +19,41 @@ except Exception:  # pragma: no cover - brak bazy w testach
 sensor_bus = SensorSnapshot()
 sensor_bus.set_window(AVG_WINDOW_S)
 
+def configure_sensor_windows():
+    """Wczytuje ustawienia z configu i nakłada indywidualne okna."""
+    per_windows = {
+        name: cfg.get("avg_window_s")
+        for name, cfg in SENSORS.items()
+        if isinstance(cfg, dict) and cfg.get("avg_window_s") is not None
+    }
+    if per_windows:
+        sensor_bus.set_windows(per_windows)
+
+configure_sensor_windows()
+
 def set_avg_window(window: int):
     """Ustaw nowe okno uśredniania dla wszystkich czujników."""
     sensor_bus.set_window(window)
 
 # Mapowanie tematów MQTT -> pola w sensor_bus
-TOPIC_MAP = {
-    SENSORS.get("internal_temp_topic", "farmcare/sensors/internalTemp"): ("internal_temp"),
-    SENSORS.get("external_temp_topic", "farmcare/sensors/externalTemp"): ("external_temp"),
-    SENSORS.get("internal_hum_topic",  "farmcare/sensors/internalHumidity"): ("internal_hum"),
-    SENSORS.get("wind_speed_topic",    "farmcare/sensors/windSpeed"): ("wind_speed"),
-    SENSORS.get("rain_topic",          "farmcare/sensors/rain"): ("rain"),
+DEFAULT_SENSOR_TOPICS = {
+    "internal_temp": "farmcare/sensors/internalTemp",
+    "external_temp": "farmcare/sensors/externalTemp",
+    "internal_hum": "farmcare/sensors/internalHumidity",
+    "wind_speed": "farmcare/sensors/windSpeed",
+    "rain": "farmcare/sensors/rain",
 }
+
+TOPIC_MAP = {}
+for name, default_topic in DEFAULT_SENSOR_TOPICS.items():
+    cfg = SENSORS.get(name, {})
+    topic = cfg.get("topic", default_topic)
+    TOPIC_MAP[topic] = name
+for name, cfg in SENSORS.items():
+    if name not in DEFAULT_SENSOR_TOPICS:
+        topic = cfg.get("topic")
+        if topic:
+            TOPIC_MAP[topic] = name
 
 # Tematy dostępności wietrzników
 VENT_AVAIL_TOPICS = [f'farmcare/vents/{v["id"]}/available' for v in VENTS]

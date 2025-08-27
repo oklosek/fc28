@@ -9,7 +9,7 @@ Projekt składa się z backendu FastAPI, prostego frontendu oraz zestawu skrypt�
 - Sterowanie wietrznikami w grupach/partiach, z ograniczeniami pogodowymi i harmonogramem dziennym
 - Baza SQLite z SQLAlchemy przechowująca stany wietrzników i logi czujników
 - Konfiguracja urządzeń BONEIO (ESPHome) do obsługi przekaźników i wejść krańcowych poprzez MQTT
-- Skrypt do konfiguracji dwóch interfejsów sieciowych (WAN/LAN) wraz z zaporą iptables
+- Skrypt do konfiguracji dwóch interfejsów sieciowych (WAN/LAN) wraz z zaporą iptables (uruchamiany przez `sudo`)
 
 ## Wymagania
 - Python 3.11
@@ -33,6 +33,7 @@ Projekt składa się z backendu FastAPI, prostego frontendu oraz zestawu skrypt�
    python scripts/init_db.py
    ```
 5. Skonfiguruj interfejsy sieciowe (na etapie instalacji systemu):
+   Uruchom skrypt z uprawnieniami administratora, np. przy użyciu `sudo`:
    ```bash
    sudo scripts/configure_network.sh
    ```

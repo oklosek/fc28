@@ -1,4 +1,9 @@
 #!/bin/bash
+# Ensure the script is executed with root privileges
+if [ "$EUID" -ne 0 ]; then
+  echo "Run as root"
+  exit 1
+fi
 # Configure dual-network interface setup with isolated LAN and WAN
 # WAN interface has internet access, LAN is internal network without internet access.
 # This script should be run with root privileges during system installation.

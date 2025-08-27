@@ -59,12 +59,22 @@ Projekt składa się z backendu FastAPI, prostego frontendu oraz zestawu skrypt�
 
 Aby uruchomić interfejs w trybie pełnoekranowym (kiosk) w przeglądarce Chromium:
 
-1. Skopiuj plik `deploy/kiosk.service` do katalogu `/etc/systemd/system/`:
+1. Przejdź do katalogu repozytorium `fc28`:
    ```bash
-   sudo cp deploy/kiosk.service /etc/systemd/system/
+   cd fc28
    ```
-2. Włącz i uruchom usługę:
+   Możesz sprawdzić obecność plików usług:
    ```bash
+   ls deploy
+   ```
+2. Skopiuj pliki usług do katalogu `/etc/systemd/system/`:
+   ```bash
+   sudo cp $(pwd)/deploy/farmcare.service /etc/systemd/system/
+   sudo cp $(pwd)/deploy/kiosk.service /etc/systemd/system/
+   ```
+3. Włącz i uruchom usługi:
+   ```bash
+   sudo systemctl enable --now farmcare.service
    sudo systemctl enable --now kiosk.service
    ```
 

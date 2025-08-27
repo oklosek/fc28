@@ -28,16 +28,18 @@ Projekt składa się z backendu FastAPI, prostego frontendu oraz zestawu skrypt�
    ```bash
    pip install fastapi uvicorn sqlalchemy pydantic asyncio-mqtt pyyaml
    ```
-4. Zainicjalizuj bazę danych i wpisy domyślne:
+4. Skopiuj plik `config/.env.example` do `config/.env` i uzupełnij wartości zmiennych.
+5. Zainicjalizuj bazę danych i wpisy domyślne:
    ```bash
    python scripts/init_db.py
    ```
-5. Skonfiguruj interfejsy sieciowe (na etapie instalacji systemu):
+6. Skonfiguruj interfejsy sieciowe (na etapie instalacji systemu):
    ```bash
    sudo scripts/configure_network.sh
    ```
 
 ## Konfiguracja
+- Skopiuj `config/.env.example` do `config/.env` i uzupełnij m.in. `ADMIN_TOKEN`, parametry MQTT oraz dane logowania do brokera.
 - Główny plik konfiguracyjny: `config/settings.yaml` – parametry sterowania, mapowanie czujników, definicje wietrzników, grupy oraz opcje bezpieczeństwa
 - W sekcji `rs485_buses` każdy czujnik może opcjonalnie określić `scale` i `offset`,
   które przeskalowują surowy odczyt zgodnie ze wzorem `value*scale + offset`
@@ -61,7 +63,7 @@ pytest -q
 ## Struktura katalogów
 - `backend/` – logika aplikacji, kontroler, warstwa DB i integracje
 - `frontend/` – prosty dashboard w czystym HTML/JS
-- `config/` – ustawienia systemu i przykładowy plik `.env`
+- `config/` – ustawienia systemu i przykładowy plik `.env.example`
 - `scripts/` – skrypty pomocnicze (konfiguracja sieci, inicjalizacja bazy)
 - `boneio/` – przykładowe konfiguracje ESPHome dla modułów BoneIO
 - `deploy/` – przykładowe jednostki systemd i konfiguracja Nginx

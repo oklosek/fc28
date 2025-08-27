@@ -2,6 +2,7 @@ fastapi
 uvicorn
 sqlalchemy
 pydantic
-asyncio-mqtt
+asyncio-mqtt>=0.16.2
+paho-mqtt==1.6.1
 pyyaml
 minimalmodbus

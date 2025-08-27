@@ -28,7 +28,7 @@ Projekt składa się z backendu FastAPI, prostego frontendu oraz zestawu skrypt�
    ```bash
    pip install fastapi uvicorn sqlalchemy pydantic asyncio-mqtt pyyaml
    ```
-4. Skopiuj plik `config/.env.example` do `config/.env` i uzupełnij wartości zmiennych.
+4. Skopiuj plik `config/.env.example` do `config/.env` i uzupełnij wartości zmiennych `ADMIN_TOKEN`, `MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME` oraz `MQTT_PASSWORD`.
 5. Zainicjalizuj bazę danych i wpisy domyślne:
    ```bash
    python scripts/init_db.py
@@ -40,7 +40,7 @@ Projekt składa się z backendu FastAPI, prostego frontendu oraz zestawu skrypt�
    ```
 
 ## Konfiguracja
-- Skopiuj `config/.env.example` do `config/.env` i uzupełnij m.in. `ADMIN_TOKEN`, parametry MQTT oraz dane logowania do brokera.
+- Skopiuj `config/.env.example` do `config/.env` i uzupełnij m.in. `ADMIN_TOKEN`, `MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME` oraz `MQTT_PASSWORD`.
 - Główny plik konfiguracyjny: `config/settings.yaml` – parametry sterowania, mapowanie czujników, definicje wietrzników, grupy oraz opcje bezpieczeństwa
 - W sekcji `rs485_buses` każdy czujnik może opcjonalnie określić `scale` i `offset`,
   które przeskalowują surowy odczyt zgodnie ze wzorem `value*scale + offset`

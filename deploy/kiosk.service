@@ -1,0 +1,12 @@
+[Unit]
+Description=Chromium Kiosk
+After=network-online.target
+
+[Service]
+User=pi
+ExecStart=/usr/bin/chromium --kiosk http://localhost:8000/static/index.html
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

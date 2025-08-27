@@ -52,6 +52,19 @@ Projekt składa się z backendu FastAPI, prostego frontendu oraz zestawu skrypt�
 2. Panel użytkownika: `http://HOST:8000/static/index.html`
 3. Panel instalatora: `http://HOST:8000/static/installer.html`
 
+## Tryb kiosk
+
+Aby uruchomić interfejs w trybie pełnoekranowym (kiosk) w przeglądarce Chromium:
+
+1. Skopiuj plik `deploy/kiosk.service` do katalogu `/etc/systemd/system/`:
+   ```bash
+   sudo cp deploy/kiosk.service /etc/systemd/system/
+   ```
+2. Włącz i uruchom usługę:
+   ```bash
+   sudo systemctl enable --now kiosk.service
+   ```
+
 ## Testy
 Uruchom testy jednostkowe:
 ```bash

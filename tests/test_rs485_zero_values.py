@@ -33,18 +33,19 @@ def test_zero_values_from_rs485_override_sensor_bus(monkeypatch):
 
     monkeypatch.setattr(Vent, "move_to", noop_move_to)
 
-    # prepare sensor_bus with a non-zero value
-    sensor_bus.internal_temp.q.clear()
+    # prepare sensor_bus with a non-zero value and clear other sensors
+    for name in ("internal_temp", "external_temp", "internal_hum", "wind_speed", "rain"):
+        getattr(sensor_bus, name).q.clear()
     sensor_bus.internal_temp.add(5.0)
 
     class DummyRS485:
         def averages(self):
             return {
                 "internal_temp": 0.0,
-                "external_temp": None,
-                "internal_hum": None,
-                "wind_speed": None,
-                "rain": None,
+                "external_temp": 0.0,
+                "internal_hum": 0.0,
+                "wind_speed": 0.0,
+                "rain": 0.0,
             }
 
     controller = controller_module.Controller(DummyRS485())

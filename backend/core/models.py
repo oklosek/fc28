@@ -10,8 +10,9 @@ class SensorAverager:
     q: Deque[float] = field(default_factory=lambda: deque(maxlen=5))
     def add(self, v: float):
         self.q.append(float(v))
-    def avg(self) -> float:
-        if not self.q: return 0.0
+    def avg(self) -> float | None:
+        if not self.q:
+            return None
         return sum(self.q) / len(self.q)
 
     # pozwala dynamicznie zmienić okno uśredniania
@@ -42,3 +43,6 @@ class SensorSnapshot:
         for name, window in windows.items():
             if name in self.__dataclass_fields__:
                 getattr(self, name).set_window(window)
+
+    def averages(self) -> dict[str, float | None]:
+        return {name: getattr(self, name).avg() for name in self.__dataclass_fields__}

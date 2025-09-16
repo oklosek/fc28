@@ -1,22 +1,22 @@
-# -*- coding: utf-8 -*-
-# backend/core/rs485.py – odczyt z dwóch magistral RS485 (np. Modbus RTU) + uśrednianie
+﻿# -*- coding: utf-8 -*-
+# backend/core/rs485.py â€“ odczyt z dwĂłch magistral RS485 (np. Modbus RTU) + uĹ›rednianie
 import asyncio
 import logging
 import time
 import minimalmodbus
-from backend.core.config import RS485_BUSES
+from backend.core.config import RS485_BUSES, AVG_WINDOW_S, SENSORS
 from backend.core.models import SensorSnapshot
 
 """Odczyt danych z magistrali RS485.
 
 W praktycznym zastosowaniu wykorzystywana jest biblioteka ``minimalmodbus`` do
-komunikacji z urządzeniami Modbus RTU. W pliku ``settings.yaml`` znajdują się
-informacje o dostępnych magistralach oraz rejestrach poszczególnych czujników.
+komunikacji z urzÄ…dzeniami Modbus RTU. W pliku ``settings.yaml`` znajdujÄ… siÄ™
+informacje o dostÄ™pnych magistralach oraz rejestrach poszczegĂłlnych czujnikĂłw.
 
-Każdy obiekt :class:`RS485Bus` odpowiada jednej magistrali i przechowuje listę
-czujników do odczytu. Metoda :meth:`RS485Bus.read_all` iteruje po tej liście,
-otwierając port szeregowy dla każdego czujnika i próbując odczytać wskazany
-rejestr. W przypadku błędów komunikacyjnych zwracana jest ``None``.
+KaĹĽdy obiekt :class:`RS485Bus` odpowiada jednej magistrali i przechowuje listÄ™
+czujnikĂłw do odczytu. Metoda :meth:`RS485Bus.read_all` iteruje po tej liĹ›cie,
+otwierajÄ…c port szeregowy dla kaĹĽdego czujnika i prĂłbujÄ…c odczytaÄ‡ wskazany
+rejestr. W przypadku bĹ‚Ä™dĂłw komunikacyjnych zwracana jest ``None``.
 """
 
 class RS485Bus:
@@ -25,7 +25,7 @@ class RS485Bus:
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
-        self.sensors = sensors  # lista czujników na tej magistrali
+        self.sensors = sensors  # lista czujnikĂłw na tej magistrali
         self.errors = 0
         self.available = True
         self.next_retry = 0.0
@@ -33,9 +33,9 @@ class RS485Bus:
     async def read_all(self) -> dict:
         """Odczytaj wszystkie zdefiniowane czujniki.
 
-        Dla każdego czujnika tworzony jest obiekt :class:`minimalmodbus.Instrument`
+        Dla kaĹĽdego czujnika tworzony jest obiekt :class:`minimalmodbus.Instrument`
         i wykonywany jest odczyt z podanego rejestru. Wynik konwertowany jest na
-        ``float``. W przypadku wystąpienia błędów komunikacyjnych zwracana jest
+        ``float``. W przypadku wystÄ…pienia bĹ‚Ä™dĂłw komunikacyjnych zwracana jest
         ``None``.
         """
 
@@ -52,12 +52,12 @@ class RS485Bus:
                 def _read():
                     return instrument.read_register(s["reg"], 1)
 
-                # odczyt rejestru i konwersja na float w wątku
+                # odczyt rejestru i konwersja na float w wÄ…tku
                 value = float(await asyncio.to_thread(_read))
                 value = value * s.get("scale", 1) + s.get("offset", 0)
                 result[map_key] = value
             except (minimalmodbus.ModbusException, OSError):
-                # błędy komunikacji: timeouty, CRC itp.
+                # bĹ‚Ä™dy komunikacji: timeouty, CRC itp.
                 result[map_key] = None
 
         return result
@@ -66,10 +66,24 @@ class RS485Manager:
     def __init__(self):
         self.buses = [RS485Bus(**b) for b in RS485_BUSES]
         self.snapshot = SensorSnapshot()
+        self.snapshot.set_window(AVG_WINDOW_S)
+        per_windows = {}
+        for name, cfg in SENSORS.items():
+            if not isinstance(cfg, dict):
+                continue
+            window = cfg.get("avg_window_s")
+            if window is None:
+                continue
+            try:
+                per_windows[name] = int(window)
+            except (TypeError, ValueError):
+                continue
+        if per_windows:
+            self.snapshot.set_windows(per_windows)
         self._task = None
         self.running = False
 
-        # konfiguracja obsługi błędów magistrali
+        # konfiguracja obsĹ‚ugi bĹ‚Ä™dĂłw magistrali
         self.RETRY_DELAY = 0.5
         self.MAX_ERRORS = 3
         self.REINIT_INTERVAL = 30.0
@@ -90,7 +104,7 @@ class RS485Manager:
 
     async def _loop(self):
         while self.running:
-            # zbierz odczyty z obu magistral i uśrednij
+            # zbierz odczyty z obu magistral i uĹ›rednij
             for bus in self.buses:
                 if not bus.available:
                     if time.monotonic() < bus.next_retry:
@@ -124,14 +138,5 @@ class RS485Manager:
                 logging.warning("RS485 bus %s retry error: %s", bus.name, e)
                 raise
 
-    def averages(self) -> dict:
-        def _avg_or_none(av):
-            return av.avg() if av.q else None
-
-        return {
-            "internal_temp": _avg_or_none(self.snapshot.internal_temp),
-            "external_temp": _avg_or_none(self.snapshot.external_temp),
-            "internal_hum":  _avg_or_none(self.snapshot.internal_hum),
-            "wind_speed":    _avg_or_none(self.snapshot.wind_speed),
-            "rain":          _avg_or_none(self.snapshot.rain),
-        }
+    def averages(self) -> dict[str, float | None]:
+        return self.snapshot.averages()

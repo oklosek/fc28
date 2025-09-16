@@ -15,13 +15,7 @@ async def ws_endpoint(ws: WebSocket):
         while True:
             payload = {
                 "mode": controller.mode,
-                "sensors": {
-                    "internal_temp": sensor_bus.internal_temp.avg(),
-                    "external_temp": sensor_bus.external_temp.avg(),
-                    "internal_hum": sensor_bus.internal_hum.avg(),
-                    "wind_speed": sensor_bus.wind_speed.avg(),
-                    "rain": sensor_bus.rain.avg(),
-                },
+                "sensors": sensor_bus.averages(),
                 "vents": {vid: v.position for vid, v in controller.vents.items()},
             }
             await ws.send_json(payload)

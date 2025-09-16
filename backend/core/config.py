@@ -53,8 +53,19 @@ def ensure_dirs():
 settings = Settings()
 yaml_cfg = load_yaml_settings(settings.settings_yaml)
 
+
+# Pomocnicze
+def _parse_close_strategy(value, default='fifo') -> str:
+    if isinstance(value, (int, float)):
+        return 'lifo' if int(value) == 1 else 'fifo'
+    if isinstance(value, str):
+        val = value.strip().lower()
+        if val in ('fifo', 'lifo'):
+            return val
+    return default
+
 # Kluczowe parametry z YAML
-VENT_GROUPS = yaml_cfg.get("vent_groups", [])               # partie/sekwencje
+_RAW_VENT_GROUPS = yaml_cfg.get("vent_groups", [])           # definicje grup wentylacyjnych
 VENTS = yaml_cfg.get("vents", [])                           # wszystkie wietrzniki (dynamicznie)
 BONEIOS = yaml_cfg.get("boneio_devices", [])                # mapowanie kanałów
 VENT_DEFAULTS = yaml_cfg.get("vent_defaults", {})           # domyślne parametry wietrzników
@@ -64,3 +75,29 @@ CONTROL = yaml_cfg.get("control", {})                       # progi, czasy itp.
 CONTROL.setdefault("temp_diff_percent", 5.0)
 SECURITY = yaml_cfg.get("security", {})                     # polityka WAN/LAN
 AVG_WINDOW_S = yaml_cfg.get("sensor_avg_window_s", 5)
+
+# Przygotuj listę grup oraz plan etapów (kompatybilność wsteczna)
+VENT_GROUPS: list[dict] = []
+for idx, grp in enumerate(_RAW_VENT_GROUPS, start=1):
+    gid = grp.get("id") or f"group_{idx}"
+    VENT_GROUPS.append({
+        "id": gid,
+        "name": grp.get("name", f"Group {idx}"),
+        "vents": list(grp.get("vents", [])),
+    })
+
+VENT_PLAN = yaml_cfg.get("vent_plan") or {}
+VENT_PLAN_CLOSE_STRATEGY = _parse_close_strategy(VENT_PLAN.get("close_strategy"), "fifo")
+VENT_PLAN_STAGES = VENT_PLAN.get("stages", [])
+
+if not VENT_PLAN_STAGES and VENT_GROUPS:
+    fallback_delay = CONTROL.get("group_delay_s", 0)
+    for idx, grp in enumerate(VENT_GROUPS, start=1):
+        VENT_PLAN_STAGES.append({
+            "id": f"stage_{idx}",
+            "name": grp["name"],
+            "mode": "serial",
+            "step_percent": 100,
+            "groups": [grp["id"]],
+            "delay_s": fallback_delay,
+        })

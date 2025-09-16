@@ -60,10 +60,10 @@ sensors:
 
 # Urządzenia BONEIO (ESPHome) – nazwy logiczne
 boneio_devices:
-  - id: "boneio_1"
+  - id: "boneio_main"
     base_topic: "boneio/1"
-  - id: "boneio_2"
-    base_topic: "boneio/2"
+
+
 
 # Domyślne parametry działania wietrzników
 vent_defaults:
@@ -77,7 +77,7 @@ vent_defaults:
 vents:
   - id: 1
     name: "Dach 1"
-    boneio_device: "boneio_1"
+    boneio_device: "boneio_main"
     travel_time_s: 30
     topics:
       up:   "boneio/1/cover/vent1/up"
@@ -85,7 +85,7 @@ vents:
       error_in: "boneio/1/in/vent1_error"   # IN1
   - id: 2
     name: "Dach 2"
-    boneio_device: "boneio_1"
+    boneio_device: "boneio_main"
     travel_time_s: 28
     topics:
       up:   "boneio/1/cover/vent2/up"
@@ -93,7 +93,7 @@ vents:
       error_in: "boneio/1/in/vent2_error"   # IN3
   - id: 3
     name: "Bok 1"
-    boneio_device: "boneio_1"
+    boneio_device: "boneio_main"
     travel_time_s: 35
     topics:
       up:   "boneio/1/cover/vent3/up"
@@ -101,22 +101,42 @@ vents:
       error_in: "boneio/1/in/vent3_error"   # IN5
   - id: 4
     name: "Dach 3"
-    boneio_device: "boneio_2"
+    boneio_device: "boneio_main"
     travel_time_s: 32
     topics:
-      up:   "boneio/2/cover/vent4/up"
-      down: "boneio/2/cover/vent4/down"
-      error_in: "boneio/2/in/vent4_error"   # IN1
+      up:   "boneio/1/cover/vent4/up"
+      down: "boneio/1/cover/vent4/down"
+      error_in: "boneio/1/in/vent4_error"   # IN7
   # ... dodawaj kolejne – system skalowalny
 
-# Grupy/partie – sekwencja: otwieraj w kolejności, z przerwą, by nie przeciążać instalacji
+# Definicje grup: przypisanie wietrznikow do grup logicznych
 vent_groups:
-  - name: "Dachowe partia 1"
-    vents: [1,2,4]
-    delay_s: 2
-  - name: "Boczne"
+  - id: "group_1"
+    name: "Dach 1+2"
+    vents: [1, 2]
+  - id: "group_2"
+    name: "Bok 1"
     vents: [3]
-    delay_s: 2
+  - id: "group_3"
+    name: "Dach 3"
+    vents: [4]
+
+# Harmonogram otwierania: etapy (parallel/serial) z krokiem i kolejnoscia
+vent_plan:
+  close_strategy: 0  # 0=fifo, 1=lifo
+  stages:
+    - id: "stage_1"
+      name: "Dach + Bok"
+      mode: "parallel"
+      step_percent: 25
+      groups: ["group_1", "group_2"]
+    - id: "stage_2"
+      name: "Dach 3"
+      mode: "serial"
+      step_percent: 100
+      groups: ["group_3"]
+      delay_s: 2
+
 
 security:
   require_token: true     # WAN wymaga nagłówka x-admin-token

@@ -6,9 +6,9 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 from backend.core.models import SensorAverager, SensorSnapshot
 
 
-def test_avg_empty_queue_returns_zero():
+def test_avg_empty_queue_returns_none():
     averager = SensorAverager()
-    assert averager.avg() == 0.0
+    assert averager.avg() is None
 
 
 def test_avg_with_less_than_window_values():
@@ -35,3 +35,21 @@ def test_sensor_snapshot_individual_windows():
     assert snap.internal_temp.window == 3
     assert snap.wind_speed.window == 4
     assert snap.external_temp.window == 1
+
+def test_sensor_snapshot_averages_handles_empty_and_values():
+    snap = SensorSnapshot()
+    assert snap.averages() == {
+        "internal_temp": None,
+        "external_temp": None,
+        "internal_hum": None,
+        "wind_speed": None,
+        "rain": None,
+    }
+    snap.internal_temp.add(10.0)
+    snap.internal_temp.add(14.0)
+    averages = snap.averages()
+    assert averages["internal_temp"] == 12.0
+    assert averages["external_temp"] is None
+    assert averages["internal_hum"] is None
+    assert averages["wind_speed"] is None
+    assert averages["rain"] is None

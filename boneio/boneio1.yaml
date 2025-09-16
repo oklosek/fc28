@@ -1,8 +1,56 @@
 esphome:
   name: boneio1
+  friendly_name: BoneIO 1
+  on_boot:
+    priority: -10
+    then:
+      - switch.turn_off: vent1_up
+      - switch.turn_off: vent1_down
+      - switch.turn_off: vent2_up
+      - switch.turn_off: vent2_down
+      - switch.turn_off: vent3_up
+      - switch.turn_off: vent3_down
+      - switch.turn_off: vent4_up
+      - switch.turn_off: vent4_down
+      - mqtt.publish:
+          topic: farmcare/vents/1/available
+          payload: "online"
+          retain: true
+      - mqtt.publish:
+          topic: farmcare/vents/2/available
+          payload: "online"
+          retain: true
+      - mqtt.publish:
+          topic: farmcare/vents/3/available
+          payload: "online"
+          retain: true
+      - mqtt.publish:
+          topic: farmcare/vents/4/available
+          payload: "online"
+          retain: true
+  on_shutdown:
+    then:
+      - mqtt.publish:
+          topic: farmcare/vents/1/available
+          payload: "offline"
+          retain: true
+      - mqtt.publish:
+          topic: farmcare/vents/2/available
+          payload: "offline"
+          retain: true
+      - mqtt.publish:
+          topic: farmcare/vents/3/available
+          payload: "offline"
+          retain: true
+      - mqtt.publish:
+          topic: farmcare/vents/4/available
+          payload: "offline"
+          retain: true
 
 esp32:
   board: esp32dev
+
+logger:
 
 ethernet:
   type: LAN8720
@@ -18,11 +66,11 @@ ethernet:
     dns1: !secret ethernet_dns
 
 mqtt:
-  broker: !secret mqtt_broker   # lokalny broker (R1000/RPi)
+  broker: !secret mqtt_broker
   topic_prefix: boneio/1
+  keepalive: 30s
+  reboot_timeout: 0s
   on_message:
-    # Komendy otwierania/zamykania otrzymywane z backendu
-    # Jedna definicja obsługuje parę tematów UP/DOWN dzięki skryptowi handle_cover_command
     - topic: boneio/1/cover/vent1/+
       then:
         - script.execute:
@@ -31,7 +79,6 @@ mqtt:
             down_switch: vent1_down
             direction: !lambda 'return topic.substr(topic.find_last_of("/") + 1);'
             state: !lambda 'return payload == "ON";'
-
     - topic: boneio/1/cover/vent2/+
       then:
         - script.execute:
@@ -40,7 +87,6 @@ mqtt:
             down_switch: vent2_down
             direction: !lambda 'return topic.substr(topic.find_last_of("/") + 1);'
             state: !lambda 'return payload == "ON";'
-
     - topic: boneio/1/cover/vent3/+
       then:
         - script.execute:
@@ -49,8 +95,15 @@ mqtt:
             down_switch: vent3_down
             direction: !lambda 'return topic.substr(topic.find_last_of("/") + 1);'
             state: !lambda 'return payload == "ON";'
+    - topic: boneio/1/cover/vent4/+
+      then:
+        - script.execute:
+            id: handle_cover_command
+            up_switch: vent4_up
+            down_switch: vent4_down
+            direction: !lambda 'return topic.substr(topic.find_last_of("/") + 1);'
+            state: !lambda 'return payload == "ON";'
 
-# Skrypt obsługuje pary tematów UP/DOWN dla wietrzników
 script:
   - id: handle_cover_command
     parameters:
@@ -74,41 +127,57 @@ script:
             }
           }
 
-# Przekaźniki (przykład – dostosuj do pinów BONEIO)
 switch:
   - platform: gpio
     pin: GPIO16
     id: vent1_up
     name: "vent1_up"
     interlock: [vent1_down]
+    restore_mode: ALWAYS_OFF
   - platform: gpio
     pin: GPIO17
     id: vent1_down
     name: "vent1_down"
     interlock: [vent1_up]
+    restore_mode: ALWAYS_OFF
   - platform: gpio
     pin: GPIO18
     id: vent2_up
     name: "vent2_up"
     interlock: [vent2_down]
+    restore_mode: ALWAYS_OFF
   - platform: gpio
     pin: GPIO19
     id: vent2_down
     name: "vent2_down"
     interlock: [vent2_up]
+    restore_mode: ALWAYS_OFF
   - platform: gpio
     pin: GPIO21
     id: vent3_up
     name: "vent3_up"
     interlock: [vent3_down]
+    restore_mode: ALWAYS_OFF
   - platform: gpio
     pin: GPIO22
     id: vent3_down
     name: "vent3_down"
     interlock: [vent3_up]
+    restore_mode: ALWAYS_OFF
+  - platform: gpio
+    pin: GPIO26
+    id: vent4_up
+    name: "vent4_up"
+    interlock: [vent4_down]
+    restore_mode: ALWAYS_OFF
+  - platform: gpio
+    pin: GPIO27
+    id: vent4_down
+    name: "vent4_down"
+    interlock: [vent4_up]
+    restore_mode: ALWAYS_OFF
 
 binary_sensor:
-  # Błąd krańcowy/awaria – ODD inputs: IN1, IN3, IN5...
   - platform: gpio
     pin: GPIO32
     name: "vent1_error"
@@ -119,11 +188,12 @@ binary_sensor:
       - mqtt.publish:
           topic: boneio/1/in/vent1_error
           payload: "1"
+          retain: true
     on_release:
       - mqtt.publish:
           topic: boneio/1/in/vent1_error
           payload: "0"
-
+          retain: true
   - platform: gpio
     pin: GPIO33
     name: "vent2_error"
@@ -134,11 +204,12 @@ binary_sensor:
       - mqtt.publish:
           topic: boneio/1/in/vent2_error
           payload: "1"
+          retain: true
     on_release:
       - mqtt.publish:
           topic: boneio/1/in/vent2_error
           payload: "0"
-
+          retain: true
   - platform: gpio
     pin: GPIO25
     name: "vent3_error"
@@ -149,8 +220,25 @@ binary_sensor:
       - mqtt.publish:
           topic: boneio/1/in/vent3_error
           payload: "1"
+          retain: true
     on_release:
       - mqtt.publish:
           topic: boneio/1/in/vent3_error
           payload: "0"
-
+          retain: true
+  - platform: gpio
+    pin: GPIO34
+    name: "vent4_error"
+    id: vent4_error
+    filters:
+      - invert:
+    on_press:
+      - mqtt.publish:
+          topic: boneio/1/in/vent4_error
+          payload: "1"
+          retain: true
+    on_release:
+      - mqtt.publish:
+          topic: boneio/1/in/vent4_error
+          payload: "0"
+          retain: true

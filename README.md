@@ -1,95 +1,147 @@
 # FarmCare 2.0 (FC28)
 
-FarmCare to kontroler klimatu dla szklarni/tuneli wyposażonych w wietrzniki i czujniki środowiskowe.  
-Projekt składa się z backendu FastAPI, prostego frontendu oraz zestawu skryptów i konfiguracji do uruchomienia całości na urządzeniu typu SBC (np. RPi).
+FarmCare to kontroler klimatu dla szklarni i tuneli wyposazonych w czujniki srodowiskowe, wietrzniki oraz moduly BoneIO. Projekt sklada sie z backendu FastAPI, prostego frontendu oraz zestawu skryptow i konfiguracji umozliwiajacych uruchomienie calosci na urzadzeniu typu SBC (np. Raspberry Pi, Rock Pi, itp.).
 
-## Funkcje
-- Backend FastAPI uruchamiany podczas startu systemu i serwujący frontend statyczny
-- Integracja z czujnikami poprzez MQTT i magistrale RS485, z możliwością uśredniania odczytów
-- Sterowanie wietrznikami w grupach/partiach, z ograniczeniami pogodowymi i harmonogramem dziennym
-- Baza SQLite z SQLAlchemy przechowująca stany wietrzników i logi czujników
-- Konfiguracja urządzeń BONEIO (ESPHome) do obsługi przekaźników i wejść krańcowych poprzez MQTT
-- Skrypt do konfiguracji dwóch interfejsów sieciowych (WAN/LAN) wraz z zaporą iptables (uruchamiany przez `sudo`)
+## Najwazniejsze funkcje
+- Backend FastAPI serwujacy API, websockety i statyczny frontend
+- Integracja z czujnikami poprzez MQTT i magistrale RS485 wraz z usrednianiem odczytow
+- Sterowanie grupami wietrznikow z ograniczeniami pogodowymi i harmonogramem
+- Baza SQLite z SQLAlchemy zapisujaca logi i ostatnie stany
+- Konfiguracje ESPHome dla modulow BoneIO oraz uslugi systemd i Nginx
 
 ## Wymagania
-- Python 3.11
-- Zależności: `fastapi`, `uvicorn`, `sqlalchemy`, `pydantic`, `asyncio-mqtt`, `pyyaml`
-- Broker MQTT (np. `mosquitto`)
-- Opcjonalnie: środowisko wirtualne (`python -m venv .venv`)
+- Python >= 3.11 (zalecane 64-bit)
+- Systemowe pakiety: `git`, `python3-venv`, `python3-pip`, `sqlite3`, `libffi-dev`, `build-essential`
+- Do obslugi RS485: konwerter USB-RS485 kompatybilny z minimalmodbus
+- Broker MQTT (Mosquitto lub inny zgodny z MQTT 3.1.1)
+- Na urzadzeniu z interfejsem graficznym: `chromium-browser`, `xserver-xorg`, `xinit`, `matchbox-window-manager`, `unclutter`
 
-## Instalacja
-1. Sklonuj repozytorium i przejdź do katalogu projektu.
-2. (Opcjonalnie) utwórz i aktywuj wirtualne środowisko:
+Pakiety Pythona znajduja sie w `requirements.txt`. Mozna skorzystac z `environment.yml`, jesli preferowany jest Conda.
+
+## Przygotowanie urzadzenia produkcyjnego
+Ponizej przyklad dla Raspberry Pi OS Lite 64-bit, ale kroki sa analogiczne dla innych dystrybucji Debiana.
+
+1. Zaktualizuj system i zainstaluj niezbedne pakiety:
    ```bash
-   python -m venv .venv
+   sudo apt update
+   sudo apt install -y git python3 python3-venv python3-pip sqlite3 libffi-dev build-essential \
+       mosquitto mosquitto-clients network-manager xserver-xorg xinit matchbox-window-manager \
+       chromium-browser unclutter
+   ```
+2. Utworz katalog roboczy i pobierz repozytorium (przyklad /opt/farmcare):
+   ```bash
+   sudo mkdir -p /opt/farmcare
+   sudo chown $USER:$USER /opt/farmcare
+   git clone https://example.com/farmcare.git /opt/farmcare
+   ```
+   (podmien adres repozytorium na docelowy modu)
+3. Utworz i aktywuj wirtualne srodowisko:
+   ```bash
+   cd /opt/farmcare
+   python3 -m venv .venv
    source .venv/bin/activate
+   pip install --upgrade pip
+   pip install -r requirements.txt
    ```
-3. Zainstaluj wymagane biblioteki:
+4. Skonfiguruj zmienne srodowiskowe:
    ```bash
-   pip install fastapi uvicorn sqlalchemy pydantic asyncio-mqtt pyyaml
+   cp config/.env.example config/.env
+   nano config/.env
    ```
-4. Skopiuj plik `config/.env.example` do `config/.env` i uzupełnij wartości zmiennych `ADMIN_TOKEN`, `MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME` oraz `MQTT_PASSWORD`.
-5. Zainicjalizuj bazę danych i wpisy domyślne:
+   Ustaw m.in. `ADMIN_TOKEN`, `MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD`.
+5. Dostosuj `config/settings.yaml` do instalacji (czasy przejazdu, mapowanie czujnikow, identyfikatory BoneIO).
+6. Zainicjalizuj baze danych i wpisy domyslne:
    ```bash
    python scripts/init_db.py
    ```
-
-6. Skonfiguruj interfejsy sieciowe (na etapie instalacji systemu):
+7. (Opcjonalnie) uruchom skrypt konfigurujacy siec WAN/LAN:
    ```bash
    sudo scripts/configure_network.sh
    ```
-
-## Konfiguracja
-- Skopiuj `config/.env.example` do `config/.env` i uzupełnij m.in. `ADMIN_TOKEN`, `MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME` oraz `MQTT_PASSWORD`.
-- Główny plik konfiguracyjny: `config/settings.yaml` – parametry sterowania, mapowanie czujników, definicje wietrzników, grupy oraz opcje bezpieczeństwa
-- W sekcji `rs485_buses` każdy czujnik może opcjonalnie określić `scale` i `offset`,
-  które przeskalowują surowy odczyt zgodnie ze wzorem `value*scale + offset`
-- Przykładowe definicje urządzeń BoneIO do wgrania w ESPHome: katalog `boneio/`
-- Dodatkowe pliki usług/systemd i Nginx znajdują się w katalogu `deploy/`
-
-## Uruchomienie
-1. Uruchom backend (serwer API + frontend statyczny):
+8. Skopiuj uslugi systemd:
    ```bash
-   uvicorn backend.app:app --host 0.0.0.0 --port 8000
+   sudo cp deploy/farmcare.service /etc/systemd/system/
+   sudo cp deploy/kiosk.service /etc/systemd/system/
    ```
-2. Panel użytkownika: `http://HOST:8000/static/index.html`
-3. Panel instalatora: `http://HOST:8000/static/installer.html`
+   W razie potrzeby zedytuj klauzule `User=` (domyslnie `pi`) tak, aby odpowiadala uzytkownikowi, pod ktorym ma dzialac proces.
+9. Wskaz katalog roboczy dla uslug (domyslnie `/opt/farmcare`). Jesli repozytorium znajduje sie w innym miejscu, zaktualizuj pola `WorkingDirectory` oraz `PYTHONPATH` w `farmcare.service`.
+10. Zarejestruj uslugi i uruchom backend oraz kiosk:
+    ```bash
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now farmcare.service
+    sudo systemctl enable --now kiosk.service
+    ```
+11. Sprawdz statusy:
+    ```bash
+    systemctl status farmcare.service
+    journalctl -u farmcare.service -f
+    ```
 
-## Tryb kiosk
+## Tryb kiosk (Chromium)
+Serwis `deploy/kiosk.service` uruchamia Chromium w trybie pelnoekranowym. Przed startem upewnij sie, ze:
+- Konto wskazane w usludze (`User=`) ma autologowanie do systemu graficznego lub zainstalowano lekkie srodowisko startowane poleceniem `startx`.
+- W pliku `/etc/xdg/openbox/autostart` lub w jednostce systemd dlawkowane jest polecenie `startx /usr/bin/chromium-browser --kiosk ...`. Alternatywnie mozna posluzyc sie przygotowana usluga, ktora korzysta z `xinit` i `matchbox-window-manager`.
+- Jesli urzadzenie posiada ekran dotykowy, warto wlaczyc `unclutter` (ukrywanie kursora) i `xinput --set-prop` zgodnie z dokumentacja producenta.
 
-Aby uruchomić interfejs w trybie pełnoekranowym (kiosk) w przeglądarce Chromium:
+Usluga `kiosk.service` zaklada, ze backend jest dostepny pod `http://localhost:8000/static/index.html`. Dostosuj adres URL, jesli uruchamiasz panel na innym hoscie lub porcie.
 
-1. Przejdź do katalogu repozytorium `fc28`:
+## Lokalny broker MQTT (Mosquitto)
+1. Po instalacji pakietu `mosquitto` (patrz sekcja wyzej) wlacz usluge:
    ```bash
-   cd fc28
+   sudo systemctl enable --now mosquitto.service
    ```
-   Możesz sprawdzić obecność plików usług:
+2. Utworz uzytkownika oraz haslo dla polaczen FarmCare/BoneIO (opcjonalnie):
    ```bash
-   ls deploy
+   sudo mosquitto_passwd -c /etc/mosquitto/passwd farmcare
    ```
-2. Skopiuj pliki usług do katalogu `/etc/systemd/system/`:
+3. Dodaj plik konfiguracyjny `/etc/mosquitto/conf.d/farmcare.conf`:
+   ```
+   allow_anonymous false
+   password_file /etc/mosquitto/passwd
+   listener 1883 0.0.0.0
+   persistence true
+   persistence_location /var/lib/mosquitto/
+   ```
+4. Przeladuj usluge:
    ```bash
-   sudo cp $(pwd)/deploy/farmcare.service /etc/systemd/system/
-   sudo cp $(pwd)/deploy/kiosk.service /etc/systemd/system/
+   sudo systemctl restart mosquitto.service
    ```
-3. Włącz i uruchom usługi:
-   ```bash
-   sudo systemctl enable --now farmcare.service
-   sudo systemctl enable --now kiosk.service
-   ```
+5. Ustaw dane logowania w `config/.env` oraz (jesli potrzeba) w plikach BoneIO (sekcja ponizej).
+
+## Konfiguracja BoneIO (ESPHome)
+- Plik `boneio/boneio1.yaml` zawiera kompletna konfiguracje dla pierwszego modulu BoneIO. Na starcie wszystkie przelaczniki sa zerowane, a tematy `farmcare/vents/<id>/available` publikowane z flaga `retain`, co pozwala backendowi rozpoznac gotowosc urzadzenia.
+- Dla kazdego dodatkowego modulu skopiuj plik i zaktualizuj `topic_prefix`, numery pinow oraz identyfikatory w `config/settings.yaml`.
+- Skopiuj wartosci do `boneio/secrets.yaml` (`ethernet_ip`, `mqtt_broker`, ewentualnie dane logowania) i wgraj konfiguracje przy pomocy `esphome run boneio/boneio1.yaml`.
+
+## Uruchomienie w trybie developerskim
+Do szybkiego startu lokalnego (bez systemd i kiosku):
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp config/.env.example config/.env  # uzupelnij dane
+python scripts/init_db.py
+uvicorn backend.app:app --host 0.0.0.0 --port 8000
+```
+Panel uzytkownika bedzie dostepny pod `http://127.0.0.1:8000/static/index.html`.
 
 ## Testy
-Uruchom testy jednostkowe:
+Uruchom testy jednostkowe poleceniem:
 ```bash
 pytest -q
 ```
 
-## Struktura katalogów
-- `backend/` – logika aplikacji, kontroler, warstwa DB i integracje
-- `frontend/` – prosty dashboard w czystym HTML/JS
-- `config/` – ustawienia systemu i przykładowy plik `.env.example`
-- `scripts/` – skrypty pomocnicze (konfiguracja sieci, inicjalizacja bazy)
-- `boneio/` – przykładowe konfiguracje ESPHome dla modułów BoneIO
-- `deploy/` – przykładowe jednostki systemd i konfiguracja Nginx
-- `tests/` – testy jednostkowe
+## Struktura katalogow
+- `backend/` - logika aplikacji, kontroler oraz warstwa bazy danych
+- `frontend/` - statyczny dashboard HTML/JS
+- `config/` - konfiguracja systemu, pliki `.env`, `settings.yaml`
+- `boneio/` - konfiguracje ESPHome dla modulow BoneIO
+- `deploy/` - pliki uslug systemd i przykladowa konfiguracja Nginx
+- `scripts/` - skrypty pomocnicze (baza, konfiguracja sieci)
+- `tests/` - testy jednostkowe projektu
+
+## Przydatne polecenia diagnostyczne
+- `journalctl -u farmcare.service -f` - sledzenie logow backendu
+- `mosquitto_sub -h <broker> -v -t 'farmcare/#'` - podglad komunikacji MQTT
+- `minimalmodbus --scan` - szybki test komunikacji RS485 (zaleznie od systemu)
 

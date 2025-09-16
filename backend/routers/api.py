@@ -29,13 +29,7 @@ def get_state():
                     user_target=v.user_target,
                 )
             )
-        sensors = {
-            "internal_temp": sensor_bus.internal_temp.avg(),
-            "external_temp": sensor_bus.external_temp.avg(),
-            "internal_hum": sensor_bus.internal_hum.avg(),
-            "wind_speed": sensor_bus.wind_speed.avg(),
-            "rain": sensor_bus.rain.avg(),
-        }
+        sensors = sensor_bus.averages()
         return StateDTO(
             mode=controller.mode, vents=vents, sensors=sensors, config=CONTROL
         )
@@ -53,6 +47,13 @@ def set_all(p=Body(...)):
     pct = float(p.get("position", 0))
     controller.manual_set_all(pct)
     return {"ok": True}
+
+@router.post("/vents/group/{group_id}")
+def set_group(group_id: str, p=Body(...)):
+    controller = _controller()
+    pct = float(p.get("position", 0))
+    ok = controller.manual_set_group(group_id, pct)
+    return {"ok": ok}
 
 @router.post("/vents/{vent_id}")
 def set_one(vent_id: int, p=Body(...)):

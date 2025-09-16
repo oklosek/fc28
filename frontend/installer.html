@@ -1,33 +1,73 @@
 <!doctype html>
 <html lang="pl">
 <head>
-  <meta charset="utf-8"/>
+  <meta charset="utf-8" />
   <title>FarmCare – Panel instalatora</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <link rel="stylesheet" href="/static/styles.css"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
   <h1>Panel instalatora</h1>
-  <div>
-    <label>Admin token: <input id="adm" type="password"/></label>
-    <button id="load">Wczytaj konfigurację</button>
-  </div>
-  <pre id="cfg"></pre>
-  <button id="calAll">Kalibracja wszystkich</button>
+  <section class="auth">
+    <div class="form-row">
+      <label>Admin token
+        <input id="tokenInput" type="password" autocomplete="off" placeholder="wpisz token" />
+      </label>
+      <button id="loadConfig">Wczytaj konfigurację</button>
+      <span id="status"></span>
+    </div>
+  </section>
 
-  <script>
-  const $ = (s)=>document.querySelector(s);
-  $("#load").onclick = async ()=>{
-    const t = $("#adm").value;
-    const r = await fetch("/installer/config", {headers: {"x-admin-token": t}});
-    const j = await r.json();
-    $("#cfg").textContent = JSON.stringify(j, null, 2);
-  };
-  $("#calAll").onclick = async ()=>{
-    const t = $("#adm").value;
-    await fetch("/installer/calibrate/all", {method:"POST", headers: {"x-admin-token": t}});
-    alert("Kalibracja uruchomiona");
-  };
-  </script>
+  <section id="controlSection" class="hidden requires-config">
+    <h2>Parametry sterowania</h2>
+    <div id="controlFields" class="form-grid"></div>
+    <button id="saveControl">Zapisz parametry</button>
+  </section>
+
+  <section id="groupsSection" class="hidden requires-config">
+    <h2>Grupy wietrzników</h2>
+    <div id="groupList"></div>
+    <button id="addGroup">Dodaj grupę</button>
+  </section>
+
+  <section id="planSection" class="hidden requires-config">
+    <h2>Plan etapów otwierania</h2>
+    <div class="form-row">
+      <label>Strategia zamykania (0 = FIFO, 1 = LIFO)
+        <select id="planCloseStrategy">
+          <option value="0">0 – FIFO</option>
+          <option value="1">1 – LIFO</option>
+        </select>
+      </label>
+    </div>
+    <div id="stageList"></div>
+    <button id="addStage">Dodaj etap</button>
+    <button id="saveGroups">Zapisz grupy i plan</button>
+  </section>
+
+  <section id="manualSection" class="hidden requires-config">
+    <h2>Sterowanie grupą</h2>
+    <div class="form-row">
+      <label>Grupa
+        <select id="manualGroupSelect"></select>
+      </label>
+      <label>Pozycja [%]
+        <input id="manualGroupValue" type="number" min="0" max="100" value="0" />
+      </label>
+      <button id="manualGroupSend">Ustaw</button>
+    </div>
+  </section>
+
+  <section id="actionsSection" class="hidden requires-config">
+    <h2>Akcje serwisowe</h2>
+    <button id="calibrateAll">Kalibracja wszystkich</button>
+  </section>
+
+  <section id="rawSection" class="hidden requires-config">
+    <h2>Podgląd JSON</h2>
+    <pre id="rawConfig"></pre>
+  </section>
+
+  <script src="/static/installer.js"></script>
 </body>
 </html>

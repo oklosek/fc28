@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# backend/core/controller.py – logika automatyczna, tryb ręczny, ograniczenia pogodowe, partie
+# backend/core/controller.py Ă˘â‚¬â€ś logika automatyczna, tryb rĂ„â„˘czny, ograniczenia pogodowe, partie
 import asyncio, threading, time, json
 from collections import OrderedDict
 from typing import Dict, List, Optional
@@ -30,6 +30,7 @@ class Controller:
         self._groups: OrderedDict[str, dict] = OrderedDict()
         self._plan: List[dict] = []
         self._close_strategy = self._normalize_close_strategy(VENT_PLAN_CLOSE_STRATEGY)
+        self._apply_control_overrides()
         self._tolerance = float(CONTROL.get("ignore_delta_percent", 0.5)) or 0.5
         self._configure_plan(VENT_GROUPS, VENT_PLAN_STAGES, self._close_strategy)
         self._apply_plan_overrides()
@@ -174,6 +175,73 @@ class Controller:
                 }
             )
         self._plan = plan
+
+    def _coerce_control_value(self, key: str, raw: object):
+        baseline = CONTROL.get(key)
+        value = raw
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped == "":
+                return baseline
+            value = stripped
+        if isinstance(baseline, bool):
+            if isinstance(value, str):
+                lowered = value.lower()
+                return lowered in {"1", "true", "yes", "on"}
+            return bool(value)
+        if isinstance(baseline, int) and not isinstance(baseline, bool):
+            try:
+                return int(float(value))
+            except (TypeError, ValueError):
+                return baseline
+        if isinstance(baseline, float):
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return baseline
+        if isinstance(value, str):
+            lowered = value.lower()
+            if lowered in {"1", "true", "yes", "on"}:
+                return True
+            if lowered in {"0", "false", "no", "off"}:
+                return False
+            try:
+                if "." in value:
+                    return float(value)
+                return int(value)
+            except ValueError:
+                pass
+        return value
+
+    def _apply_control_overrides(self) -> None:
+        try:
+            with SessionLocal() as session:
+                rows = session.query(Setting).filter(Setting.key.like("control.%")).all()
+        except Exception:
+            return
+        if not rows:
+            return
+        overrides: Dict[str, object] = {}
+        for row in rows:
+            if not row.key or not row.key.startswith("control."):
+                continue
+            suffix = row.key.split(".", 1)[1]
+            if not suffix:
+                continue
+            value = self._coerce_control_value(suffix, row.value)
+            if value is not None:
+                overrides[suffix] = value
+        if overrides:
+            CONTROL.update(overrides)
+
+    def _persist_control_overrides(self, control: Dict[str, object]) -> None:
+        try:
+            with SessionLocal() as session:
+                for key, value in control.items():
+                    session.merge(Setting(key=f"control.{key}", value=str(value)))
+                session.commit()
+        except Exception:
+            pass
 
     def _apply_plan_overrides(self) -> None:
         try:
@@ -330,13 +398,13 @@ class Controller:
         hum_thr     = CONTROL.get("humidity_thr", 70.0)
         diff_pct    = CONTROL.get("temp_diff_percent", 5.0)
         diff = s["internal_temp"] - target_temp
-        # prosta proporcja: temp_diff_percent% / 1°C
+        # prosta proporcja: temp_diff_percent% / 1Ă‚Â°C
         pct = 0.0
         if diff > 0 and s["external_temp"] < s["internal_temp"]:
             pct = min(100.0, diff * diff_pct)
         elif diff < 0 and s["external_temp"] > s["internal_temp"]:
             pct = min(100.0, abs(diff) * diff_pct)
-        # wilgotność wymusza min. wietrzenie (gdy bez deszczu/wiatru krytycznego – sprawdzimy niżej)
+        # wilgotnoÄąâ€şĂ„â€ˇ wymusza min. wietrzenie (gdy bez deszczu/wiatru krytycznego Ă˘â‚¬â€ś sprawdzimy niÄąÄ˝ej)
         if s["internal_hum"] > hum_thr and pct < CONTROL.get("min_open_hum_percent", 20.0):
             pct = CONTROL.get("min_open_hum_percent", 20.0)
         return pct
@@ -347,7 +415,7 @@ class Controller:
         lim  = CONTROL.get("risk_open_limit_percent", 50.0)
         rain = s["rain"] > CONTROL.get("rain_threshold", 0.5)
         allow_override = CONTROL.get("allow_humidity_override", False)
-        # krytyk: domyślnie zamknij wszystko; opcjonalna szczelina przy wilgotności
+        # krytyk: domyÄąâ€şlnie zamknij wszystko; opcjonalna szczelina przy wilgotnoÄąâ€şci
         if s["wind_speed"] >= crit or rain:
             if allow_override and s["internal_hum"] > CONTROL.get("humidity_thr", 70.0):
                 return CONTROL.get("crit_hum_crack_percent", 10.0)
@@ -410,7 +478,7 @@ class Controller:
         asyncio.set_event_loop(self._async_loop)
         while self._running:
             try:
-                # zbierz średnie: z MQTT i RS485 (łączymy – preferuj RS485 jeśli skonfigurowany)
+                # zbierz Äąâ€şrednie: z MQTT i RS485 (Äąâ€šĂ„â€¦czymy Ă˘â‚¬â€ś preferuj RS485 jeÄąâ€şli skonfigurowany)
                 s1 = sensor_bus.averages()
                 s2 = self.rs485.averages()
                 # merge ? je?li RS485 ma warto?? inn? ni? ``None`` to przyjmij j? jako bardziej wiarygodn?
@@ -436,7 +504,7 @@ class Controller:
                             self._save_vent_state(vid)
                         self._last_auto_target = target
                 else:
-                    # manual – tylko bezpieczeństwo
+                    # manual Ă˘â‚¬â€ś tylko bezpieczeÄąâ€žstwo
                     for vid, v in self.vents.items():
                         desired = v.user_target
                         safe = self._apply_safety(desired, s1, manual=True)
@@ -514,7 +582,12 @@ class Controller:
         vent_plan: Optional[dict] = None,
     ) -> None:
         if control:
-            CONTROL.update(control)
+            normalized = {}
+            for key, value in control.items():
+                normalized[key] = self._coerce_control_value(key, value)
+            CONTROL.update(normalized)
+            self._persist_control_overrides(normalized)
+            self._tolerance = float(CONTROL.get("ignore_delta_percent", 0.5)) or 0.5
         if vent_groups is not None or vent_plan is not None:
             groups_cfg = vent_groups if vent_groups is not None else self.export_groups()
             plan_cfg = vent_plan if isinstance(vent_plan, dict) else self.export_plan()
@@ -523,6 +596,9 @@ class Controller:
             if close_strategy is None:
                 close_strategy = plan_cfg.get("close_strategy_flag")
             self._configure_plan(groups_cfg, stages_cfg, close_strategy)
+
+
+
 
 
 

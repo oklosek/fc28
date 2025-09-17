@@ -25,7 +25,10 @@ app.add_middleware(
 
 # Serwowanie frontendu (lokalnie)
 frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend"))
-app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
+if os.path.isdir(frontend_dir):
+    app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
+else:
+    print("Static frontend directory not found; skipping /static mount")
 
 # Routery
 app.include_router(api.router, prefix="/api", tags=["api"])
@@ -73,3 +76,4 @@ async def index():
 @app.get("/installer")
 async def installer_index():
     return {"ok": True, "message": "Open /static/installer.html"}
+

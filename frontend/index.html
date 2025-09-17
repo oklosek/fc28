@@ -1,33 +1,79 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="pl">
 <head>
   <meta charset="utf-8"/>
-  <title>FarmCare – Dashboard</title>
+  <title>FarmCare - Dashboard</title>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <link rel="stylesheet" href="/static/styles.css"/>
 </head>
 <body>
   <header>
-    <h1>FarmCare 2.0 – Dashboard</h1>
-    <button id="modeBtn">Przełącz na ręczny</button>
+    <div>
+      <h1>FarmCare 2.0 - Dashboard</h1>
+      <p id="modeIndicator">Mode: --</p>
+      <button id="modeBtn">Toggle mode</button>
+    </div>
+    <div class="admin-tools">
+      <label>Admin token
+        <input type="password" id="tokenInput" placeholder="x-admin-token"/>
+      </label>
+      <button id="saveTokenBtn">Save token</button>
+      <span id="tokenStatus" class="info"></span>
+    </div>
   </header>
 
+  <section id="message" class="hidden"></section>
+
   <section id="sensors">
-    <div>Temp. wewn.: <span id="t_in">–</span></div>
-    <div>Temp. zewn.: <span id="t_out">–</span></div>
-    <div>Wilgotność:  <span id="hum">–</span></div>
-    <div>Wiatr:       <span id="wind">–</span></div>
-    <div>Opady:       <span id="rain">–</span></div>
+    <h2>Current readings</h2>
+    <div class="cards" id="sensorCards"></div>
+  </section>
+
+  <section id="configSummary">
+    <h2>Controller targets</h2>
+    <div class="cards" id="configCards"></div>
   </section>
 
   <section id="vents">
-    <h2>Wietrzniki</h2>
-    <div>
-      <label>Wszystkie:</label>
-      <input type="range" id="allRange" min="0" max="100" value="0"/>
-      <span id="allVal">0%</span>
+    <h2>Manual vent control</h2>
+    <div class="control-block">
+      <label>All vents</label>
+      <div class="slider-row">
+        <input type="range" id="allRange" min="0" max="100" value="0"/>
+        <span id="allVal">0%</span>
+      </div>
     </div>
-    <div id="ventList"></div>
+    <div id="groupList" class="group-list"></div>
+    <div id="ventList" class="vent-list"></div>
+  </section>
+
+  <section id="history">
+    <h2>Sensor history</h2>
+    <div class="history-controls">
+      <label>Entries
+        <input type="number" id="historyLimit" min="10" max="500" step="10" value="100"/>
+      </label>
+      <button id="refreshHistoryBtn">Refresh</button>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Sensor</th>
+          <th>Value</th>
+        </tr>
+      </thead>
+      <tbody id="historyBody"></tbody>
+    </table>
+  </section>
+
+  <section id="controlSettings">
+    <h2>Adjust controller</h2>
+    <form id="controlForm">
+      <div class="form-grid" id="controlFields"></div>
+      <button type="submit">Save changes</button>
+      <span id="controlStatus" class="info"></span>
+    </form>
   </section>
 
   <script src="/static/farmcare.js"></script>

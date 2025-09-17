@@ -11,7 +11,7 @@ dependencies = [
     "fastapi",
     "uvicorn",
     "sqlalchemy",
-    "pydantic",
+    "pydantic<2",
     "asyncio-mqtt",
     "pyyaml",
     "minimalmodbus",
@@ -19,3 +19,4 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 namespaces = true
+

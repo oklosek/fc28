@@ -1,7 +1,9 @@
-# -*- coding: utf-8 -*-
-# backend/core/schemas.py – Pydantic do API
+﻿# -*- coding: utf-8 -*-
+# backend/core/schemas.py - Pydantic models for API responses
+from datetime import datetime
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import Any, Dict, List, Optional
+
 
 class VentDTO(BaseModel):
     id: int
@@ -10,8 +12,23 @@ class VentDTO(BaseModel):
     available: bool
     user_target: float
 
+
+class VentGroupDTO(BaseModel):
+    id: str
+    name: str
+    vents: List[int]
+
+
+class SensorHistoryDTO(BaseModel):
+    ts: datetime
+    name: str
+    value: float
+
+
 class StateDTO(BaseModel):
     mode: str
     vents: List[VentDTO]
-    sensors: Dict[str, float]
+    sensors: Dict[str, Optional[float]]
     config: Dict[str, Any]
+    groups: List[VentGroupDTO]
+

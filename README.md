@@ -1,4 +1,4 @@
-# FarmCare 2.0 (FC28)
+﻿# FarmCare 2.0 (FC28)
 
 FarmCare to kontroler klimatu dla szklarni i tuneli wyposazonych w czujniki srodowiskowe, wietrzniki oraz moduly BoneIO. Projekt sklada sie z backendu FastAPI, prostego frontendu oraz zestawu skryptow i konfiguracji umozliwiajacych uruchomienie calosci na urzadzeniu typu SBC (np. Raspberry Pi, Rock Pi, itp.). Ponizszy przewodnik przeprowadza przez kompletna instalacje oraz wstepna konfiguracje urzadzenia.
 
@@ -67,6 +67,7 @@ FarmCare to kontroler klimatu dla szklarni i tuneli wyposazonych w czujniki srod
    pip install --upgrade pip
    pip install -r requirements.txt
    ```
+   > Uwaga: `requirements.txt` zawiera pin `pydantic<2`, aby zachowac zgodnosc z aktualnym modulem konfiguracji. Jesli w systemie masz juz Pydantic 2.x, odinstaluj go przed instalacja zaleznosci z pliku.
    Alternatywnie mozesz skorzystac z `environment.yml`, jesli preferujesz Conda.
 
 ### 4. Konfiguracja zmiennych srodowiskowych (`config/.env`)
@@ -112,10 +113,11 @@ Plik `config/settings.yaml` definiuje logike sterowania. Dostosuj go do instalac
             wind_speed_avg: "wind_speed"
             wind_speed_max: "wind_gust"
   ```
-  Driver `sensecap_sco2_03b` przelicza temperature i wilgotnosc dzielac wartosci rejestrowe przez 100, a `sensecap_s500_v2` dzieli odczyty przez 1000 (temperatura w °C, predkosci w m/s, cisnienie w Pa).
-
+  Driver `sensecap_sco2_03b` przelicza temperature i wilgotnosc dzielac wartosci rejestrowe przez 100, a `sensecap_s500_v2` dzieli odczyty przez 1000 (temperatura w degC, predkosci w m/s, cisnienie w Pa).
 
 Po zmianach zachowaj plik i przygotuj kopie zapasowa dla zespolu serwisowego.
+
+> Panel instalatora i dashboard zapisuje nadpisane progi w bazie (tabela `settings`). Przy starcie backend naklada je na wartosci z pliku, dlatego zmiany wykonane w trakcie pracy nie wymagaja modyfikacji `config/settings.yaml`.
 
 ### 6. Konfiguracja BoneIO (ESPHome)
 1. W pliku `boneio/secrets.yaml` wpisz parametry sieci oraz adres brokera:
@@ -194,6 +196,8 @@ Domyslnie WAN=`eth0`, LAN=`eth1`, a adres LAN to `192.168.50.1/24`. Dostosuj zmi
    sudo systemctl enable --now kiosk.service   # tylko jesli uzywasz kiosku
    ```
 
+5. Upewnij sie, ze katalog `frontend/` zostanie skopiowany na docelowa maszyne (np. `cp -r frontend /opt/farmcare/frontend`). Backend montuje `/static` tylko wtedy, gdy katalog istnieje w `WorkingDirectory` uslugi.
+
 ### 11. Pierwsze uruchomienie i testy
 1. Sprawdz status backendu i kiosku:
    ```bash
@@ -204,9 +208,16 @@ Domyslnie WAN=`eth0`, LAN=`eth1`, a adres LAN to `192.168.50.1/24`. Dostosuj zmi
    ```bash
    curl http://localhost:8000/api/health
    ```
-3. Otworz panel (`http://localhost:8000/static/index.html`) na urzadzeniu lub zdalnie przez tunel/Nginx. Wprowadz `ADMIN_TOKEN`, aby uzyskac dostep administracyjny.
+3. Otworz panel (`http://localhost:8000/static/index.html`) na urzadzeniu lub zdalnie przez tunel/Nginx. W polu "Admin token" wpisz wartosc `ADMIN_TOKEN`, aby odblokowac zmiany i zapisy. Sprawdz, czy widoczne sa karty sensorow, tabela historii oraz suwaki recznego sterowania.
 4. Sprawdz, czy czujniki przesylaja dane (`mosquitto_sub -h <broker> -v -t 'farmcare/#'`) oraz czy wietrzniki reaguja na polecenia z panelu (wykonaj krotki ruch i potwierdz, ze czasy przejazdu sa poprawne).
 5. Po pierwszym uruchomieniu wykonaj kalibracje wietrznikow z poziomu panelu (plan kalibracji bazuje na `vent_defaults` i `travel_time_s`).
+
+### 12. Dashboard operatora (podglad i sterowanie)
+- *Current readings* - karty z biezacymi wartosciami czujnikow na podstawie srednich z MQTT oraz RS485; brak odczytu pokazuje "--".
+- *Manual vent control* - suwak "All vents" oraz kontrolki grup i pojedynczych wietrznikow dzialaja tylko w trybie recznym; w razie potrzeby kliknij "Switch to manual".
+- *Sensor history* - tabela pobiera wpisy z `/api/history` (dane z tabeli SQLite `sensor_log`, najnowsze na gorze). Jesli jest pusta, zweryfikuj logowanie w `backend/core/mqtt_client.py` oraz lacznosc MQTT/RS485.
+- *Adjust controller* - formularz zapisuje progi `control.*` (temperatura, wilgotnosc, limity wiatru). Zmiany trafiaja do tabeli `settings` i sa ladowane przy starcie, wiec nadpisuja wartosci domyslne z `config/settings.yaml`. Wymaga poprawnego `ADMIN_TOKEN`; bledny token konczy sie odpowiedzia 401.
+- *Admin token* - token przechowywany w `localStorage` przegladarki; po zmianie wartosci w `.env` zapisz go ponownie przyciskiem "Save token".
 
 ## Aktualizacja oprogramowania
 - Zatrzymaj uslugi:
@@ -240,7 +251,7 @@ uvicorn backend.app:app --host 0.0.0.0 --port 8000
 Panel uzytkownika bedzie dostepny pod `http://127.0.0.1:8000/static/index.html`. Polecenia mozna wykonac na dowolnym systemie z Pythonem 3.11.
 
 ## Testy
-Uruchom testy jednostkowe poleceniem:
+Przed uruchomieniem zainstaluj zaleznosc testowa (`pip install pytest`) i uruchom testy jednostkowe:
 ```bash
 pytest -q
 ```
@@ -262,3 +273,6 @@ pytest -q
 - `minimalmodbus --scan` - test komunikacji RS485 (zaleznie od systemu)
 - `sqlite3 data/farmcare.sqlite3 '.tables'` - wglad do tabel bazy danych
 - `esphome logs boneio/boneio1.yaml` - monitorowanie logow z modulu BoneIO w trybie serwisowym
+
+
+

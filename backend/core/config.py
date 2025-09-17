@@ -43,8 +43,17 @@ class Settings(BaseSettings):
 def load_yaml_settings(path: str):
     if yaml is None:
         return {}
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+    except FileNotFoundError:
+        return {}
+    except Exception as exc:
+        print(f"Failed to read settings.yaml: {exc}")
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return data
 
 def ensure_dirs():
     DB_DIR.mkdir(parents=True, exist_ok=True)
@@ -101,3 +110,4 @@ if not VENT_PLAN_STAGES and VENT_GROUPS:
             "groups": [grp["id"]],
             "delay_s": fallback_delay,
         })
+

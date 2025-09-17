@@ -1,4 +1,4 @@
-# config/settings.yaml – centralna konfiguracja systemu
+# config/settings.yaml - centralna konfiguracja systemu
 control:
   controller_loop_s: 1
   scheduler_loop_s: 1
@@ -20,60 +20,75 @@ control:
 
 sensor_avg_window_s: 5
 
-# Dwóch RS485: oddzielnie dla czujników wewn. i zewn.
+# Dwie magistrale RS485: wewnetrzna i zewnetrzna
 rs485_buses:
   - name: "internal_bus"
     port: "/dev/ttyUSB0"
     baudrate: 9600
     timeout: 0.2
     sensors:
-      # przykładowe mapowanie (slave,id,register)-> map_to
-      # opcjonalnie scale i offset skalują odczyt: value*scale + offset
-      - { slave: 1, reg: 30001, map_to: "internal_temp", scale: 1, offset: 0 }
-      - { slave: 1, reg: 30002, map_to: "internal_hum",  scale: 1, offset: 0 }
+      - driver: "sensecap_sco2_03b"
+        slave: 45
+        outputs:
+          co2: "internal_co2"
+          temperature: "internal_temp"
+          humidity: "internal_hum"
   - name: "external_bus"
     port: "/dev/ttyUSB1"
     baudrate: 9600
     timeout: 0.2
     sensors:
-      - { slave: 2, reg: 30001, map_to: "external_temp", scale: 1, offset: 0 }
-      - { slave: 2, reg: 30002, map_to: "wind_speed",   scale: 1, offset: 0 }
-      - { slave: 2, reg: 30003, map_to: "rain",          scale: 1, offset: 0 }
+      - driver: "sensecap_s500_v2"
+        slave: 10
+        outputs:
+          air_temperature: "external_temp"
+          air_humidity: "external_hum"
+          barometric_pressure: "external_pressure"
+          wind_direction_avg: "wind_direction"
+          wind_speed_avg: "wind_speed"
+          wind_speed_max: "wind_gust"
 
-# Mapowanie czujników publikowanych po MQTT (jeśli BoneIO publikuje)
-# Każdy wpis może opcjonalnie określić własne okno uśredniania
-# (avg_window_s). W przypadku braku wartości użyty zostanie
-# globalny parametr ``sensor_avg_window_s``.
+# Mapowanie czujnikow publikowanych po MQTT (jesli BoneIO publikuje)
 sensors:
   internal_temp:
     topic: "farmcare/sensors/internalTemp"
     avg_window_s: 5
+  internal_hum:
+    topic: "farmcare/sensors/internalHumidity"
+    avg_window_s: 5
+  internal_co2:
+    avg_window_s: 5
   external_temp:
     topic: "farmcare/sensors/externalTemp"
     avg_window_s: 7
-  internal_hum:
-    topic: "farmcare/sensors/internalHumidity"
+  external_hum:
+    avg_window_s: 7
+  external_pressure:
+    avg_window_s: 7
   wind_speed:
     topic: "farmcare/sensors/windSpeed"
+  wind_gust:
+    avg_window_s: 5
+  wind_direction:
+    avg_window_s: 5
   rain:
     topic: "farmcare/sensors/rain"
-
-# Urządzenia BONEIO (ESPHome) – nazwy logiczne
+# Urzadzenia BONEIO (ESPHome) - nazwy logiczne
 boneio_devices:
   - id: "boneio_main"
     base_topic: "boneio/1"
 
 
 
-# Domyślne parametry działania wietrzników
+# Domyslne parametry dzialania wietrznikow
 vent_defaults:
   reverse_pause_s: 1.0
   min_move_s: 0.5
   calibration_buffer_s: 0.5
   ignore_delta_percent: 0.5
 
-# Wietrzniki – dynamicznie; każdy ma kanały UP/DOWN na danym BONEIO
-# Oddzielne wejścia błędu (IN1, IN3, IN5, ...) – tu jako topic 'error_in'
+# Wietrzniki - dynamicznie; kazdy ma kanaly UP/DOWN na danym BONEIO
+# Oddzielne wejscia bledu (IN1, IN3, IN5, ...) - tu jako topic 'error_in'
 vents:
   - id: 1
     name: "Dach 1"
@@ -107,7 +122,7 @@ vents:
       up:   "boneio/1/cover/vent4/up"
       down: "boneio/1/cover/vent4/down"
       error_in: "boneio/1/in/vent4_error"   # IN7
-  # ... dodawaj kolejne – system skalowalny
+  # ... dodawaj kolejne - system skalowalny
 
 # Definicje grup: przypisanie wietrznikow do grup logicznych
 vent_groups:
@@ -138,5 +153,15 @@ vent_plan:
       delay_s: 2
 
 
-security:
-  require_token: true     # WAN wymaga nagłówka x-admin-token
+security:  require_token: true     # WAN wymaga naglowka x-admin-token
+
+
+
+
+
+
+
+
+
+
+

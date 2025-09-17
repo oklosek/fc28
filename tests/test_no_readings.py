@@ -12,23 +12,21 @@ from backend.core.vents import Vent
 def test_sensor_bus_averages_empty_returns_none():
     for name in ("internal_temp", "external_temp", "internal_hum", "wind_speed", "rain"):
         getattr(sensor_bus, name).q.clear()
-    assert sensor_bus.averages() == {
-        "internal_temp": None,
-        "external_temp": None,
-        "internal_hum": None,
-        "wind_speed": None,
-        "rain": None,
-    }
+    averages = sensor_bus.averages()
+    expected = {"internal_temp", "external_temp", "internal_hum", "wind_speed", "rain"}
+    assert expected.issubset(set(averages.keys()))
+    assert all(averages[key] is None for key in expected)
+
+
 
 def test_rs485_manager_averages_empty_returns_none():
     mgr = RS485Manager()
-    assert mgr.averages() == {
-        "internal_temp": None,
-        "external_temp": None,
-        "internal_hum": None,
-        "wind_speed": None,
-        "rain": None,
-    }
+    averages = mgr.averages()
+    expected = {"internal_temp", "external_temp", "internal_hum", "wind_speed", "rain"}
+    assert expected.issubset(set(averages.keys()))
+    assert all(averages[key] is None for key in expected)
+
+
 
 
 def test_controller_skips_on_missing_readings(monkeypatch):
@@ -138,9 +136,9 @@ def test_controller_resumes_when_readings_available(monkeypatch):
 
     def fake_compute(self, snapshot):
         calls["compute"] += 1
-        assert snapshot == values
+        for key, val in values.items():
+            assert snapshot[key] == val
         return 25.0
-
     def fake_apply(self, base, snapshot, manual):
         assert manual is False
         return base

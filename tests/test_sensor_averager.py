@@ -36,15 +36,25 @@ def test_sensor_snapshot_individual_windows():
     assert snap.wind_speed.window == 4
     assert snap.external_temp.window == 1
 
+
 def test_sensor_snapshot_averages_handles_empty_and_values():
     snap = SensorSnapshot()
-    assert snap.averages() == {
-        "internal_temp": None,
-        "external_temp": None,
-        "internal_hum": None,
-        "wind_speed": None,
-        "rain": None,
+    averages = snap.averages()
+    assert all(value is None for value in averages.values())
+    expected = {
+        "internal_temp",
+        "external_temp",
+        "internal_hum",
+        "external_hum",
+        "internal_co2",
+        "external_pressure",
+        "wind_speed",
+        "wind_gust",
+        "wind_direction",
+        "rain",
     }
+    assert expected.issubset(set(averages.keys()))
+
     snap.internal_temp.add(10.0)
     snap.internal_temp.add(14.0)
     averages = snap.averages()

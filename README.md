@@ -87,12 +87,33 @@ FarmCare to kontroler klimatu dla szklarni i tuneli wyposazonych w czujniki srod
 ### 5. Konfiguracja pliku `config/settings.yaml`
 Plik `config/settings.yaml` definiuje logike sterowania. Dostosuj go do instalacji:
 - Sekcja `control` - progi temperatury, wilgotnosci, predkosci wiatru oraz opoznienia ruchu. Ustaw `target_temp_c`, `humidity_thr`, `wind_risk_ms`, `wind_crit_ms` zgodnie z wymaganiami uprawy.
-- `rs485_buses` - lista magistral RS485. Dla kazdej z nich ustaw port (`/dev/ttyUSBx`) oraz mapowania rejestrow na logiczne nazwy (`map_to`). Parametry `scale` i `offset` pozwalaja skalowac wartosc z czujnika.
-- `sensors` - powiazania tematow MQTT z nazwami czujnikow uzywanymi w systemie. Ustaw `topic` i (opcjonalnie) `avg_window_s`.
-- `boneio_devices` - identyfikatory modulow BoneIO oraz ich `base_topic`. Musza odpowiadac temu, co wysyla ESPHome.
-- `vent_defaults` i `vents` - konfiguracja wietrznikow. Zmierz realny czas przejazdu (`travel_time_s`), uzupelnij tematy MQTT `up`, `down`, `error_in` oraz przypisz `boneio_device`.
-- `vent_groups` i `vent_plan` - grupy i harmonogram otwierania/zamykania. Zdefiniuj grupy logiczne, kolejnosc dzialania (`parallel`/`serial`), `step_percent` i opoznienia pomiedzy etapami.
-- `security.require_token` - ustaw na `false`, jesli lokalna siec nie wymaga tokena w naglowku `x-admin-token`.
+- `rs485_buses` - konfiguracja magistral RS485. Dla kazdego portu ustaw `name`, `port`, parametry transmisji oraz liste `sensors`. Przy czujnikach SenseCAP uzyj driverow `sensecap_sco2_03b` (CO2/temperatura/wilgotnosc) i `sensecap_s500_v2` (stacja pogodowa):
+  ```yaml
+  rs485_buses:
+    - name: "internal_bus"
+      port: "/dev/ttyUSB0"
+      sensors:
+        - driver: "sensecap_sco2_03b"
+          slave: 45  # domyslny adres SenseCAP S-CO2-03B
+          outputs:
+            co2: "internal_co2"
+            temperature: "internal_temp"
+            humidity: "internal_hum"
+    - name: "external_bus"
+      port: "/dev/ttyUSB1"
+      sensors:
+        - driver: "sensecap_s500_v2"
+          slave: 10  # domyslny adres SenseCAP S500 V2
+          outputs:
+            air_temperature: "external_temp"
+            air_humidity: "external_hum"
+            barometric_pressure: "external_pressure"
+            wind_direction_avg: "wind_direction"
+            wind_speed_avg: "wind_speed"
+            wind_speed_max: "wind_gust"
+  ```
+  Driver `sensecap_sco2_03b` przelicza temperature i wilgotnosc dzielac wartosci rejestrowe przez 100, a `sensecap_s500_v2` dzieli odczyty przez 1000 (temperatura w °C, predkosci w m/s, cisnienie w Pa).
+
 
 Po zmianach zachowaj plik i przygotuj kopie zapasowa dla zespolu serwisowego.
 

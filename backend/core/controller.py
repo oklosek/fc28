@@ -417,7 +417,11 @@ class Controller:
                 for k, v in s2.items():
                     if v is not None:
                         s1[k] = v
-                if any(v is None for v in s1.values()):
+                required_keys = ("internal_temp", "external_temp", "internal_hum", "wind_speed")
+                missing_required = any(s1.get(key) is None for key in required_keys)
+                if s1.get("rain") is None:
+                    s1["rain"] = 0.0
+                if missing_required:
                     time.sleep(CONTROL.get("controller_loop_s", 1.0))
                     continue
                 # tryb
@@ -519,3 +523,7 @@ class Controller:
             if close_strategy is None:
                 close_strategy = plan_cfg.get("close_strategy_flag")
             self._configure_plan(groups_cfg, stages_cfg, close_strategy)
+
+
+
+

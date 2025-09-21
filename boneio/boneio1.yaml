@@ -58,7 +58,9 @@ ethernet:
   mdio_pin: GPIO18
   power_pin: GPIO5
   phy_addr: 0
-  clk_mode: GPIO0_IN
+  clk:
+    mode: CLK_EXT_IN
+    pin: GPIO0
   manual_ip:
     static_ip: !secret ethernet_ip
     gateway: !secret ethernet_gateway
@@ -129,57 +131,58 @@ script:
 
 switch:
   - platform: gpio
-    pin: GPIO16
+    pin: GPIO32
     id: vent1_up
     name: "vent1_up"
     interlock: [vent1_down]
     restore_mode: ALWAYS_OFF
   - platform: gpio
-    pin: GPIO17
+    pin: GPIO33
     id: vent1_down
     name: "vent1_down"
     interlock: [vent1_up]
     restore_mode: ALWAYS_OFF
   - platform: gpio
-    pin: GPIO18
+    pin: GPIO13
     id: vent2_up
     name: "vent2_up"
     interlock: [vent2_down]
     restore_mode: ALWAYS_OFF
   - platform: gpio
-    pin: GPIO19
+    pin: GPIO14
     id: vent2_down
     name: "vent2_down"
     interlock: [vent2_up]
     restore_mode: ALWAYS_OFF
   - platform: gpio
-    pin: GPIO21
+    pin: GPIO15
     id: vent3_up
     name: "vent3_up"
     interlock: [vent3_down]
     restore_mode: ALWAYS_OFF
   - platform: gpio
-    pin: GPIO22
+    pin: GPIO4
     id: vent3_down
     name: "vent3_down"
     interlock: [vent3_up]
     restore_mode: ALWAYS_OFF
   - platform: gpio
-    pin: GPIO26
+    pin: GPIO16
     id: vent4_up
     name: "vent4_up"
     interlock: [vent4_down]
     restore_mode: ALWAYS_OFF
   - platform: gpio
-    pin: GPIO27
+    pin: GPIO17
     id: vent4_down
     name: "vent4_down"
     interlock: [vent4_up]
     restore_mode: ALWAYS_OFF
 
+
 binary_sensor:
   - platform: gpio
-    pin: GPIO32
+    pin: GPIO34
     name: "vent1_error"
     id: vent1_error
     filters:
@@ -195,7 +198,7 @@ binary_sensor:
           payload: "0"
           retain: true
   - platform: gpio
-    pin: GPIO33
+    pin: GPIO35
     name: "vent2_error"
     id: vent2_error
     filters:
@@ -211,7 +214,7 @@ binary_sensor:
           payload: "0"
           retain: true
   - platform: gpio
-    pin: GPIO25
+    pin: GPIO36
     name: "vent3_error"
     id: vent3_error
     filters:
@@ -227,7 +230,7 @@ binary_sensor:
           payload: "0"
           retain: true
   - platform: gpio
-    pin: GPIO34
+    pin: GPIO39
     name: "vent4_error"
     id: vent4_error
     filters:

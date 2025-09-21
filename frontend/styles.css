@@ -26,16 +26,23 @@ section h2 { margin-top: 0; font-size: 1.2rem; }
 .card p { margin: 0; font-weight: 600; font-size: 1.1rem; }
 
 .control-block { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
-.slider-row { display: flex; align-items: center; gap: 12px; }
+.slider-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.slider-row span { min-width: 120px; }
+.slider-row .target, .target-value, .group-target { font-weight: 600; }
+.slider-row .actual, .actual-value, .group-actual { color: #555; font-size: 0.9rem; }
 input[type=range] { flex: 1; }
 
+.bulk-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+
 .vent-list, .group-list { display: flex; flex-direction: column; gap: 12px; }
-.vent-row { display: grid; grid-template-columns: 200px 1fr 60px 100px; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid #eee; }
+.vent-row { display: grid; grid-template-columns: 220px 1fr 120px 140px 90px; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid #eee; }
+.vent-name { font-weight: 600; }
 .group-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px; border: 1px solid #dcdcdc; border-radius: 6px; background: #fafafa; }
 .group-info h3 { margin: 0 0 4px; }
 .group-info p { margin: 0; font-size: 0.9rem; color: #555; }
-.group-control { display: flex; align-items: center; gap: 12px; min-width: 260px; }
-.group-control input[type=range] { width: 180px; }
+.group-control { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-width: 280px; }
+.group-control input[type=range] { width: 200px; }
+.group-control span { min-width: 130px; }
 
 .ok { color: #0a0; }
 .err { color: #a00; font-weight: bold; }

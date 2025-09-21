@@ -40,7 +40,12 @@
       <label>All vents</label>
       <div class="slider-row">
         <input type="range" id="allRange" min="0" max="100" value="0"/>
-        <span id="allVal">0%</span>
+        <span id="allVal" class="target">cel: 0%</span>
+        <span id="allActual" class="actual">aktualnie: 0%</span>
+      </div>
+      <div class="bulk-actions">
+        <button type="button" id="openAllBtn">OTWÓRZ WSZYSTKO</button>
+        <button type="button" id="closeAllBtn">ZAMKNIJ WSZYSTKO</button>
       </div>
     </div>
     <div id="groupList" class="group-list"></div>

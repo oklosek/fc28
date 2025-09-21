@@ -2,6 +2,8 @@
 
 FarmCare to kontroler klimatu dla szklarni i tuneli wyposazonych w czujniki srodowiskowe, wietrzniki oraz moduly BoneIO. Projekt sklada sie z backendu FastAPI, prostego frontendu oraz zestawu skryptow i konfiguracji umozliwiajacych uruchomienie calosci na urzadzeniu typu SBC (np. Raspberry Pi, Rock Pi, itp.). Ponizszy przewodnik przeprowadza przez kompletna instalacje oraz wstepna konfiguracje urzadzenia.
 
+> **Uwaga (aktualizacja):** Zaktualizowano instrukcje pod katem typowych bledow napotykanych przy instalacji (Mosquitto/persistence, siec/iptables, backend/uvicorn, healthcheck, kiosk, BoneIO).
+
 ## Najwazniejsze funkcje
 - Backend FastAPI serwujacy API, websockety i statyczny frontend
 - Integracja z czujnikami poprzez MQTT i magistrale RS485 wraz z usrednianiem odczytow
@@ -147,77 +149,171 @@ Po zmianach zachowaj plik i przygotuj kopie zapasowa dla zespolu serwisowego.
    ```
    Skrypt utworzy katalog `data/`, baze SQLite `farmcare.sqlite3` oraz domyslne wpisy (tryb `auto`). Mozesz powtorzyc go, jesli baza zostanie usunieta.
 
-### 8. Konfiguracja brokera MQTT
-Mozesz uzyc lokalnej instancji Mosquitto lub zewnetrznego brokera.
-1. Aktywuj lokalna usluge:
-   ```bash
-   sudo systemctl enable --now mosquitto.service
-   ```
-2. (Opcjonalnie) utworz uzytkownika i haslo:
-   ```bash
-   sudo mosquitto_passwd -c /etc/mosquitto/passwd farmcare
-   ```
-3. Dodaj plik `/etc/mosquitto/conf.d/farmcare.conf`:
-   ```
-   allow_anonymous false
-   password_file /etc/mosquitto/passwd
-   listener 1883 0.0.0.0
-   persistence true
-   persistence_location /var/lib/mosquitto/
-   ```
-4. Przeladuj mosquitto:
-   ```bash
-   sudo systemctl restart mosquitto.service
-   ```
-5. Wprowadz dane logowania w `config/.env` oraz (w razie potrzeby) w `boneio/secrets.yaml`.
+### 8. Konfiguracja brokera MQTT (Mosquitto) - **wazne: bez duplikatow**
 
-### 9. (Opcjonalnie) Konfiguracja sieci WAN/LAN
-Skrypt `scripts/configure_network.sh` przygotowuje izolowana siec LAN dla modulow wykonawczych:
-```bash
-sudo scripts/configure_network.sh
+Mosquitto laduje najpierw `/etc/mosquitto/mosquitto.conf`, a potem pliki z `/etc/mosquitto/conf.d/*.conf`.  
+Jesli `persistence` lub `persistence_location` pojawia sie **w obu miejscach**, broker nie wystartuje.
+
+**Zalecenie:** w `/etc/mosquitto/conf.d/farmcare.conf` dodaj tylko to, co dotyczy bezpieczenstwa i listenera:
+```ini
+# /etc/mosquitto/conf.d/farmcare.conf
+allow_anonymous false
+password_file /etc/mosquitto/passwd
+listener 1883 0.0.0.0
 ```
-Domyslnie WAN=`eth0`, LAN=`eth1`, a adres LAN to `192.168.50.1/24`. Dostosuj zmienne w skrypcie do swojej infrastruktury lub wykonaj konfiguracje recznie. Skrypt wymaga uruchomienia jako `root`.
+> Jesli chcesz ustawic `persistence`/`persistence_location`, zrob to **w jednym** miejscu (albo w glownym `mosquitto.conf`, albo w `farmcare.conf` - ale nie w obu).
 
-### 10. Uslugi systemowe i kiosk
-1. Skopiuj pliki uslug systemd na docelowy system:
-   ```bash
-   sudo cp deploy/farmcare.service /etc/systemd/system/
-   sudo cp deploy/kiosk.service /etc/systemd/system/
-   ```
-2. W plikach `.service` zaktualizuj:
-   - `User=` - uzytkownik, pod ktorym dziala backend/kiosk.
-   - `WorkingDirectory` i `Environment="PYTHONPATH=..."` (w `farmcare.service`) - wskaz na katalog projektu.
-   - `ExecStart` w `kiosk.service` - dopasuj binarne (`/usr/bin/chromium-browser` vs `/usr/bin/chromium`) oraz adres URL panelu.
-3. (Opcjonalnie) Aktywuj tunel odwrotny do zdalnego serwera VPS wykorzystujac `deploy/farmcare-tunnel.service` (uzupelnij hosta, uzytkownika i klucz SSH).
-4. Przeladuj demon systemd i wlacz uslugi:
-   ```bash
-   sudo systemctl daemon-reload
-   sudo systemctl enable --now farmcare.service
-   sudo systemctl enable --now kiosk.service   # tylko jesli uzywasz kiosku
-   ```
+Utworz uzytkownika i haslo:
+```bash
+sudo mosquitto_passwd -c /etc/mosquitto/passwd farmcare
+sudo chown mosquitto:mosquitto /etc/mosquitto/passwd
+sudo chmod 640 /etc/mosquitto/passwd
+```
 
-5. Upewnij sie, ze katalog `frontend/` zostanie skopiowany na docelowa maszyne (np. `cp -r frontend /opt/farmcare/frontend`). Backend montuje `/static` tylko wtedy, gdy katalog istnieje w `WorkingDirectory` uslugi.
+**Test (foreground)** - bez wymuszania portu:
+```bash
+sudo mosquitto -c /etc/mosquitto/mosquitto.conf -v
+# (Ctrl+C aby wyjsc, jesli nie ma bledow)
+sudo systemctl restart mosquitto
+sudo systemctl status mosquitto --no-pager
+```
 
-### 11. Pierwsze uruchomienie i testy
-1. Sprawdz status backendu i kiosku:
-   ```bash
-   systemctl status farmcare.service
-   journalctl -u farmcare.service -f
-   ```
-2. Zweryfikuj, ze API odpowiada:
-   ```bash
-   curl http://localhost:8000/api/health
-   ```
-3. Otworz panel (`http://localhost:8000/static/index.html`) na urzadzeniu lub zdalnie przez tunel/Nginx. W polu "Admin token" wpisz wartosc `ADMIN_TOKEN`, aby odblokowac zmiany i zapisy. Sprawdz, czy widoczne sa karty sensorow, tabela historii oraz suwaki recznego sterowania.
-4. Sprawdz, czy czujniki przesylaja dane (`mosquitto_sub -h <broker> -v -t 'farmcare/#'`) oraz czy wietrzniki reaguja na polecenia z panelu (wykonaj krotki ruch i potwierdz, ze czasy przejazdu sa poprawne).
-5. Po pierwszym uruchomieniu wykonaj kalibracje wietrznikow z poziomu panelu (plan kalibracji bazuje na `vent_defaults` i `travel_time_s`).
+### 9. Konfiguracja sieci (WAN+LAN) - "Address already assigned", `ip_forward`, `iptables`
 
-### 12. Dashboard operatora (podglad i sterowanie)
-- *Current readings* - karty z biezacymi wartosciami czujnikow na podstawie srednich z MQTT oraz RS485; brak odczytu pokazuje "--".
-- *Manual vent control* - suwak "All vents" oraz kontrolki grup i pojedynczych wietrznikow dzialaja tylko w trybie recznym; w razie potrzeby kliknij "Switch to manual".
-- *Sensor history* - tabela pobiera wpisy z `/api/history` (dane z tabeli SQLite `sensor_log`, najnowsze na gorze). Jesli jest pusta, zweryfikuj logowanie w `backend/core/mqtt_client.py` oraz lacznosc MQTT/RS485.
-- *Adjust controller* - formularz zapisuje progi `control.*` (temperatura, wilgotnosc, limity wiatru). Zmiany trafiaja do tabeli `settings` i sa ladowane przy starcie, wiec nadpisuja wartosci domyslne z `config/settings.yaml`. Wymaga poprawnego `ADMIN_TOKEN`; bledny token konczy sie odpowiedzia 401.
-- *Admin token* - token przechowywany w `localStorage` przegladarki; po zmianie wartosci w `.env` zapisz go ponownie przyciskiem "Save token".
+Jesli skrypt ustawial juz adres i uruchamiasz go ponownie, mozesz zobaczyc:
+`Error: ipv4: Address already assigned.`  
+Uzyj idempotentnego dodawania IP:
+```bash
+ip addr replace "${LAN_ADDR}" dev "${LAN_IF}"
+```
+
+Wlacz IP forwarding **teraz i na stale**:
+```bash
+sudo sysctl -w net.ipv4.ip_forward=1
+echo 'net.ipv4.ip_forward = 1' | sudo tee /etc/sysctl.d/99-farmcare.conf
+sudo sysctl --system
+```
+
+Jesli pojawi sie `iptables: command not found`, doinstaluj:
+```bash
+sudo apt-get update && sudo apt-get install -y iptables
+```
+
+> W skrypcie mozesz dodac u gory:
+> ```bash
+> set -euo pipefail
+> command -v iptables >/dev/null || { echo "Brak iptables (sudo apt-get install -y iptables)"; exit 1; }
+> ```
+
+### 10. Backend (FastAPI) - wlasciwy modul, venv i unit systemd
+
+Kod backendu znajduje sie w katalogu `backend/`. Uruchamiamy Uvicorn z modulem **`backend.app:app`**.
+
+> Zalecany venv: `/opt/farmcare/venv`  
+> Zaleznosci: `pip install -r /opt/farmcare/requirements.txt`
+
+Przykladowa jednostka:
+```ini
+[Unit]
+Description=FarmCare Backend (FastAPI)
+After=network-online.target mosquitto.service
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+User=farmcare
+Group=farmcare
+WorkingDirectory=/opt/farmcare
+Environment="PYTHONPATH=/opt/farmcare"
+Environment="PORT=8000"
+ExecStart=/opt/farmcare/venv/bin/uvicorn backend.app:app --host 0.0.0.0 --port ${PORT}
+Restart=on-failure
+RestartSec=2s
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### 11. Healthcheck
+
+W aktualnej wersji aplikacji nie ma `/api/health`.  
+Uzyj:
+```bash
+curl http://127.0.0.1:8000/
+curl http://127.0.0.1:8000/api/state
+```
+*(Opcjonalnie mozesz dodac lekki endpoint `GET /api/health`, jesli wymaga tego monitoring.)*
+
+### 12. Kiosk (Chromium) - autostart przez systemd + `~/.xinitrc`
+
+Nie uruchamiaj `startx` z `~/.bash_profile`.  
+Zamiast tego:
+
+1) `~/.xinitrc` uzytkownika kiosku:
+```sh
+xset s off; xset -dpms; xset s noblank
+matchbox-window-manager &    # lub openbox-session
+exec chromium-browser --noerrdialogs --disable-session-crashed-bubble --disable-infobars \
+  --kiosk http://localhost:8000/static/index.html --incognito
+```
+2) Usluga `/etc/systemd/system/kiosk.service`:
+```ini
+[Unit]
+Description=Chromium Kiosk via Xorg
+After=systemd-user-sessions.service network-online.target
+Wants=network-online.target
+
+[Service]
+User=farmcare
+Group=farmcare
+WorkingDirectory=/home/farmcare
+Environment=DISPLAY=:0
+ExecStart=/usr/bin/startx /home/farmcare/.xinitrc -- -nocursor
+Restart=on-failure
+RestartSec=2s
+
+[Install]
+WantedBy=multi-user.target
+```
+Nastepnie:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable kiosk
+sudo systemctl start kiosk
+```
+
+### 13. BoneIO / ESPHome - Ethernet i broker 192.168.50.1
+
+Konfiguracja uzywa Ethernetu i wskazuje brokera z `secrets.yaml`:
+```yaml
+# boneio1.yaml (fragment)
+ethernet:
+  type: LAN8720
+  manual_ip:
+    static_ip: !secret ethernet_ip
+    gateway:   !secret ethernet_gateway
+    subnet:    !secret ethernet_subnet
+    dns1:      !secret ethernet_dns
+
+mqtt:
+  broker: !secret mqtt_broker
+```
+Przykladowe wartosci w `boneio/secrets.yaml`:
+```yaml
+ethernet_ip: 192.168.50.2
+ethernet_gateway: 192.168.50.1
+ethernet_subnet: 255.255.255.0
+ethernet_dns: 192.168.50.1
+mqtt_broker: 192.168.50.1
+```
+
+### 14. Podglad MQTT (debug)
+
+```bash
+mosquitto_sub -h 127.0.0.1 -t '#' -v
+mosquitto_sub -h 127.0.0.1 -t '$SYS/#' -v
+mosquitto_pub  -h 127.0.0.1 -t test/farmcare -m hi
+```
 
 ## Aktualizacja oprogramowania
 - Zatrzymaj uslugi:

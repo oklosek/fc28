@@ -66,7 +66,7 @@ def get_history(limit: int = Query(200, ge=10, le=2000)):
 
 
 @router.post("/control")
-def update_control(payload: Dict[str, float | int | bool], auth=Depends(require_admin)):
+def update_control(payload: Dict[str, float | int | bool]):
     controller = _controller()
     CONTROL.update(payload)
     with SessionLocal() as session:
@@ -94,8 +94,8 @@ def set_all(p=Body(...)):
     if controller is None:
         raise HTTPException(status_code=503, detail="Controller not ready")
     pct = float(p.get("position", 0))
-    controller.manual_set_all(pct)
-    return {"ok": True}
+    ok = controller.manual_set_all(pct)
+    return {"ok": ok}
 
 
 @router.post("/vents/group/{group_id}")

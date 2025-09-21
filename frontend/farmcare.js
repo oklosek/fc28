@@ -7,6 +7,9 @@ const ventList = $("#ventList");
 const groupList = $("#groupList");
 const allRange = $("#allRange");
 const allVal = $("#allVal");
+const allActual = $("#allActual");
+const openAllBtn = $("#openAllBtn");
+const closeAllBtn = $("#closeAllBtn");
 const modeBtn = $("#modeBtn");
 const modeIndicator = $("#modeIndicator");
 const tokenInput = $("#tokenInput");
@@ -27,6 +30,7 @@ let currentConfig = {};
 let formDirty = false;
 let messageTimer = null;
 let adminToken = "";
+let bulkActionInProgress = false;
 
 const SENSOR_META = {
   internal_temp: { label: "Internal temperature", unit: "C", digits: 1 },
@@ -55,6 +59,31 @@ const CONTROL_FIELDS = [
   { key: "allow_humidity_override", label: "Allow crack for high humidity", type: "checkbox" },
   { key: "crit_hum_crack_percent", label: "Crack percent at high humidity (%)", step: "1", parser: parseFloat, decimals: 0, unit: "%" },
 ];
+
+function normalizePercent(value, fallback = 0) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return fallback;
+  }
+  return Math.round(Math.min(100, Math.max(0, num)));
+}
+
+function averagePercent(items, getter) {
+  if (!items || !items.length) {
+    return 0;
+  }
+  let sum = 0;
+  let count = 0;
+  items.forEach((item) => {
+    const value = getter(item);
+    if (Number.isFinite(value)) {
+      sum += value;
+      count += 1;
+    }
+  });
+  return count ? sum / count : 0;
+}
+
 
 function showMessage(text, type = "info", timeout = 4000) {
   if (!messageEl) return;
@@ -152,31 +181,36 @@ function renderVentSliders() {
     const row = document.createElement("div");
     row.className = "vent-row";
     const disabled = mode !== "manual" || !vent.available;
+    const desired = mode === "manual"
+      ? (Number.isFinite(vent.user_target) ? vent.user_target : vent.position)
+      : vent.position;
+    const targetValue = normalizePercent(desired, normalizePercent(vent.position, 0));
+    const actualValue = normalizePercent(vent.position, 0);
     row.innerHTML = `
-      <span>#${vent.id} ${vent.name}</span>
-      <input type="range" min="0" max="100" value="${Math.round(
-        vent.position || 0
-      )}" ${disabled ? "disabled" : ""} data-vent="${vent.id}">
-      <span>${Math.round(vent.position || 0)}%</span>
-      <span class="${vent.available ? "ok" : "err"}">${
-      vent.available ? "OK" : "AWARIA"
-    }</span>
+      <span class="vent-name">#${vent.id} ${vent.name}</span>
+      <input type="range" min="0" max="100" value="${targetValue}" ${disabled ? "disabled" : ""} data-vent="${vent.id}">
+      <span class="target-value">cel: ${targetValue}%</span>
+      <span class="actual-value">aktualnie: ${actualValue}%</span>
+      <span class="${vent.available ? "ok" : "err"}">${vent.available ? "OK" : "AWARIA"}</span>
     `;
     const slider = row.querySelector("input[type=range]");
-    slider?.addEventListener("input", () => {
-      row.querySelector("span:nth-child(3)").textContent = `${slider.value}%`;
-    });
-    slider?.addEventListener("change", async () => {
-      const pos = parseInt(slider.value, 10);
-      await fetch(`/api/vents/${vent.id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ position: pos }),
+    if (slider) {
+      slider.addEventListener("input", () => {
+        const val = normalizePercent(slider.value);
+        const targetLabel = row.querySelector(".target-value");
+        if (targetLabel) {
+          targetLabel.textContent = `cel: ${val}%`;
+        }
       });
-    });
+      slider.addEventListener("change", async () => {
+        const pos = normalizePercent(slider.value);
+        await sendVentPosition(vent.id, pos);
+      });
+    }
     ventList.appendChild(row);
   });
 }
+
 
 function renderGroupSliders() {
   if (!groupList) return;
@@ -185,38 +219,38 @@ function renderGroupSliders() {
     const wrapper = document.createElement("div");
     wrapper.className = "group-row";
     const disabled = mode !== "manual";
-    const currentAvg = (() => {
-      const relevant = vents.filter((v) => group.vents.includes(v.id));
-      if (!relevant.length) return 0;
-      return (
-        relevant.reduce((acc, item) => acc + (item.position || 0), 0) /
-        relevant.length
-      );
-    })();
+    const relevant = vents.filter((v) => group.vents.includes(v.id));
+    const actualAvg = averagePercent(relevant, (v) => v.position);
+    const targetAvgSource = mode === "manual"
+      ? averagePercent(relevant, (v) => Number.isFinite(v.user_target) ? v.user_target : v.position)
+      : actualAvg;
+    const sliderValue = normalizePercent(targetAvgSource, normalizePercent(actualAvg, 0));
+    const actualValue = normalizePercent(actualAvg, 0);
     wrapper.innerHTML = `
       <div class="group-info">
         <h3>${group.name}</h3>
         <p>Wietrzniki: ${group.vents.join(", ") || "-"}</p>
       </div>
       <div class="group-control">
-        <input type="range" min="0" max="100" value="${Math.round(
-          currentAvg
-        )}" ${disabled ? "disabled" : ""} data-group="${group.id}">
-        <span>${Math.round(currentAvg)}%</span>
+        <input type="range" min="0" max="100" value="${sliderValue}" ${disabled ? "disabled" : ""} data-group="${group.id}">
+        <span class="group-target">cel: ${sliderValue}%</span>
+        <span class="group-actual">aktualnie: ${actualValue}%</span>
       </div>
     `;
     const slider = wrapper.querySelector("input[type=range]");
-    slider?.addEventListener("input", () => {
-      wrapper.querySelector("span").textContent = `${slider.value}%`;
-    });
-    slider?.addEventListener("change", async () => {
-      const pos = parseInt(slider.value, 10);
-      await fetch(`/api/vents/group/${group.id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ position: pos }),
+    if (slider) {
+      slider.addEventListener("input", () => {
+        const val = normalizePercent(slider.value);
+        const label = wrapper.querySelector(".group-target");
+        if (label) {
+          label.textContent = `cel: ${val}%`;
+        }
       });
-    });
+      slider.addEventListener("change", async () => {
+        const pos = normalizePercent(slider.value);
+        await sendGroupPosition(group.id, pos);
+      });
+    }
     groupList.appendChild(wrapper);
   });
 }
@@ -279,19 +313,28 @@ async function fetchState() {
     groups = data.groups || [];
     currentConfig = data.config || {};
 
-    modeIndicator.textContent = `Mode: ${mode.toUpperCase()}`;
-    modeBtn.textContent = mode === "auto" ? "Switch to manual" : "Switch to auto";
+    updateModeUI();
 
     renderSensors(data.sensors || {});
     renderConfigSummary(currentConfig);
     renderVentSliders();
     renderGroupSliders();
 
-    const avg = vents.length
-      ? vents.reduce((sum, v) => sum + (v.position || 0), 0) / vents.length
-      : 0;
-    allRange.value = Math.round(avg);
-    allVal.textContent = `${Math.round(avg)}%`;
+    const actualAvg = averagePercent(vents, (v) => v.position);
+    const targetAvgSource = mode === "manual"
+      ? averagePercent(vents, (v) => Number.isFinite(v.user_target) ? v.user_target : v.position)
+      : actualAvg;
+    const sliderValue = normalizePercent(targetAvgSource, normalizePercent(actualAvg, 0));
+    const actualValue = normalizePercent(actualAvg, 0);
+    if (allRange) {
+      allRange.value = String(sliderValue);
+    }
+    if (allVal) {
+      allVal.textContent = `cel: ${sliderValue}%`;
+    }
+    if (allActual) {
+      allActual.textContent = `aktualnie: ${actualValue}%`;
+    }
 
     if (!controlFieldsBox.children.length) {
       buildControlForm(currentConfig);
@@ -303,6 +346,7 @@ async function fetchState() {
     showMessage("Failed to fetch controller state", "error");
   }
 }
+
 
 async function fetchHistory(limit) {
   try {
@@ -330,15 +374,21 @@ async function fetchHistory(limit) {
 
 function loadToken() {
   adminToken = localStorage.getItem("farmcare_admin_token") || "";
-  tokenInput.value = adminToken;
-  tokenStatus.textContent = adminToken ? "Token saved" : "Token missing";
+  if (tokenInput) {
+    tokenInput.value = adminToken;
+  }
+  if (tokenStatus) {
+    tokenStatus.textContent = adminToken ? "Token saved" : "Token optional";
+  }
 }
 
 function saveToken() {
   adminToken = tokenInput.value.trim();
   localStorage.setItem("farmcare_admin_token", adminToken);
-  tokenStatus.textContent = adminToken ? "Token saved" : "Token missing";
-  showMessage("Admin token saved", "info");
+  if (tokenStatus) {
+    tokenStatus.textContent = adminToken ? "Token saved" : "Token optional";
+  }
+  showMessage("Admin token preference saved", "info");
 }
 
 function adminHeaders() {
@@ -347,6 +397,134 @@ function adminHeaders() {
     headers["x-admin-token"] = adminToken;
   }
   return headers;
+}
+
+function updateModeUI() {
+  if (modeIndicator) {
+    modeIndicator.textContent = `Mode: ${mode.toUpperCase()}`;
+  }
+  if (modeBtn) {
+    modeBtn.textContent = mode === "auto" ? "Switch to manual" : "Switch to auto";
+  }
+  if (allRange) {
+    allRange.disabled = mode !== "manual";
+  }
+}
+
+async function ensureManualMode() {
+  if (mode === "manual") {
+    return true;
+  }
+  try {
+    const response = await fetch("/api/mode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "manual" }),
+    });
+    if (!response.ok) {
+      throw new Error(`mode error: ${response.status}`);
+    }
+    const data = await response.json();
+    mode = data.mode || "manual";
+    updateModeUI();
+    await fetchState();
+    showMessage("Przełączono na tryb ręczny", "info", 2500);
+    return true;
+  } catch (err) {
+    console.error(err);
+    showMessage("Nie udało się przełączyć na tryb ręczny", "error");
+    return false;
+  }
+}
+
+async function sendAllPosition(pos, { notify = false } = {}) {
+  try {
+    const response = await fetch("/api/vents/all", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ position: pos }),
+    });
+    const data = await response.json().catch(() => ({ ok: false }));
+    if (!response.ok || data?.ok === false) {
+      throw new Error(`all command error: ${response.status}`);
+    }
+    if (notify) {
+      const msg = pos > 0 ? "Polecenie otwarcia wysłane" : "Polecenie zamknięcia wysłane";
+      showMessage(msg, "success", 2500);
+    }
+    setTimeout(fetchState, 1000);
+    return true;
+  } catch (err) {
+    console.error(err);
+    showMessage("Nie udało się wysłać polecenia do wszystkich wietrzników", "error");
+    return false;
+  }
+}
+
+async function sendGroupPosition(groupId, pos) {
+  try {
+    const response = await fetch(`/api/vents/group/${groupId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ position: pos }),
+    });
+    const data = await response.json().catch(() => ({ ok: false }));
+    if (!response.ok || data?.ok === false) {
+      throw new Error(`group command error: ${response.status}`);
+    }
+    setTimeout(fetchState, 1000);
+    return true;
+  } catch (err) {
+    console.error(err);
+    showMessage("Nie udało się wysłać polecenia do grupy", "error");
+    return false;
+  }
+}
+
+async function sendVentPosition(ventId, pos) {
+  try {
+    const response = await fetch(`/api/vents/${ventId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ position: pos }),
+    });
+    const data = await response.json().catch(() => ({ ok: false }));
+    if (!response.ok || data?.ok === false) {
+      throw new Error(`vent command error: ${response.status}`);
+    }
+    setTimeout(fetchState, 1000);
+    return true;
+  } catch (err) {
+    console.error(err);
+    showMessage("Nie udało się wysłać polecenia do wietrznika", "error");
+    return false;
+  }
+}
+
+async function handleBulkAction(target) {
+  if (bulkActionInProgress) {
+    return;
+  }
+  bulkActionInProgress = true;
+  if (openAllBtn) openAllBtn.disabled = true;
+  if (closeAllBtn) closeAllBtn.disabled = true;
+  try {
+    const ok = await ensureManualMode();
+    if (!ok) {
+      return;
+    }
+    if (allRange) {
+      allRange.value = String(normalizePercent(target));
+    }
+    if (allVal) {
+      allVal.textContent = `cel: ${normalizePercent(target)}%`;
+    }
+    await sendAllPosition(target, { notify: true });
+  } finally {
+    bulkActionInProgress = false;
+    if (openAllBtn) openAllBtn.disabled = false;
+    if (closeAllBtn) closeAllBtn.disabled = false;
+  }
 }
 
 async function toggleMode() {
@@ -362,23 +540,20 @@ async function toggleMode() {
     }
     const data = await response.json();
     mode = data.mode;
-    modeIndicator.textContent = `Mode: ${mode.toUpperCase()}`;
-    modeBtn.textContent = mode === "auto" ? "Switch to manual" : "Switch to auto";
+    updateModeUI();
     renderVentSliders();
     renderGroupSliders();
     showMessage("Controller mode updated", "success");
+    await fetchState();
   } catch (err) {
     console.error(err);
     showMessage("Failed to change mode", "error");
   }
 }
 
+
 async function submitControlForm(event) {
   event.preventDefault();
-  if (!adminToken) {
-    showMessage("Provide admin token to save settings", "warning");
-    return;
-  }
   const payload = {};
   let hasError = false;
   CONTROL_FIELDS.forEach((field) => {
@@ -430,21 +605,30 @@ async function submitControlForm(event) {
 
 if (allRange) {
   allRange.addEventListener("input", () => {
-    allVal.textContent = `${allRange.value}%`;
+    const val = normalizePercent(allRange.value);
+    if (allVal) {
+      allVal.textContent = `cel: ${val}%`;
+    }
   });
   allRange.addEventListener("change", async () => {
     if (mode !== "manual") {
       showMessage("Switch to manual mode to control position", "warning");
       return;
     }
-    const pos = parseInt(allRange.value, 10);
-    allVal.textContent = `${pos}%`;
-    await fetch("/api/vents/all", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ position: pos }),
-    });
+    const pos = normalizePercent(allRange.value);
+    if (allVal) {
+      allVal.textContent = `cel: ${pos}%`;
+    }
+    await sendAllPosition(pos);
   });
+}
+
+if (openAllBtn) {
+  openAllBtn.addEventListener("click", () => handleBulkAction(100));
+}
+
+if (closeAllBtn) {
+  closeAllBtn.addEventListener("click", () => handleBulkAction(0));
 }
 
 if (modeBtn) {
@@ -476,6 +660,7 @@ if (refreshHistoryBtn) {
 
 loadToken();
 buildControlForm({});
+updateModeUI();
 fetchState();
 fetchHistory(parseInt(historyLimitInput.value, 10) || 100);
 setInterval(fetchState, 3000);

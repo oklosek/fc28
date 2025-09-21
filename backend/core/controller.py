@@ -35,6 +35,7 @@ class Controller:
         self._configure_plan(VENT_GROUPS, VENT_PLAN_STAGES, self._close_strategy)
         self._apply_plan_overrides()
         self._last_auto_target = None
+        self._manual_lock = None
 
     def _load_vents_from_config(self):
         for v in VENTS:
@@ -384,11 +385,15 @@ class Controller:
             s.add(EventLog(level="INFO", event="MODE_CHANGE", meta={"mode": self.mode})); s.commit()
         if prev != mode:
             if mode == "manual":
-                # zatrzymaj wszystkie ruchy
+                # zatrzymaj wszystkie ruchy i wyrównaj cele do bieżącej pozycji
                 async def _stop_all():
                     await asyncio.gather(*[v.stop() for v in self.vents.values()])
                 if self._async_loop:
                     asyncio.run_coroutine_threadsafe(_stop_all(), self._async_loop)
+                for v in self.vents.values():
+                    v.user_target = float(v.position)
+                    self._save_vent_state(v.id)
+                self._last_auto_target = None
             else:
                 self._last_auto_target = None
                 self.calibrate_all()
@@ -476,6 +481,7 @@ class Controller:
     def _loop(self):
         self._async_loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._async_loop)
+        self._manual_lock = asyncio.Lock()
         while self._running:
             try:
                 # zbierz Äąâ€şrednie: z MQTT i RS485 (Äąâ€šĂ„â€¦czymy Ă˘â‚¬â€ś preferuj RS485 jeÄąâ€şli skonfigurowany)
@@ -517,16 +523,29 @@ class Controller:
                 time.sleep(CONTROL.get("controller_loop_s", 1.0))
 
     # API akcji
+    def _submit_manual(self, coro_func):
+        if not self._async_loop:
+            return False
+        async def runner():
+            lock = self._manual_lock
+            if lock is not None:
+                async with lock:
+                    await coro_func()
+            else:
+                await coro_func()
+        asyncio.run_coroutine_threadsafe(runner(), self._async_loop)
+        return True
+
     def manual_set_all(self, pct: float):
         self.set_mode("manual")
-        async def _move():
+        async def _task():
             await self._move_in_batches(pct)
             for v in self.vents.values():
                 if v.available:
                     v.user_target = pct
                     self._save_vent_state(v.id)
-        if self._async_loop:
-            asyncio.run_coroutine_threadsafe(_move(), self._async_loop)
+        if not self._submit_manual(_task):
+            return False
         return True
 
     def manual_set_group(self, group_id: str, pct: float) -> bool:
@@ -535,31 +554,35 @@ class Controller:
         if not group:
             return False
 
-        async def _move():
-            tasks = []
+        async def _task():
             for vid in group["vents"]:
                 vent = self.vents.get(vid)
-                if vent and vent.available:
-                    tasks.append(vent.move_to(pct))
-            if tasks:
-                await asyncio.gather(*tasks)
-            for vid in group["vents"]:
-                vent = self.vents.get(vid)
-                if vent and vent.available:
-                    vent.user_target = pct
-                    self._save_vent_state(vent.id)
+                if not vent or not vent.available:
+                    continue
+                await vent.move_to(pct)
+                vent.user_target = pct
+                self._save_vent_state(vent.id)
 
-        if self._async_loop:
-            asyncio.run_coroutine_threadsafe(_move(), self._async_loop)
+        if not self._submit_manual(_task):
+            return False
         return True
 
     def manual_set_one(self, vent_id: int, pct: float):
         self.set_mode("manual")
-        if vent_id in self.vents:
-            v = self.vents[vent_id]
-            if v.available: v.user_target = pct
-            return True
-        return False
+        vent = self.vents.get(vent_id)
+        if not vent:
+            return False
+
+        async def _task():
+            if not vent.available:
+                return
+            await vent.move_to(pct)
+            vent.user_target = pct
+            self._save_vent_state(vent.id)
+
+        if not self._submit_manual(_task):
+            return False
+        return True
 
     def mark_error(self, vent_id: int, state: bool):
         if vent_id in self.vents:

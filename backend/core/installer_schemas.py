@@ -41,8 +41,8 @@ class HeatingConfigPayload(BaseModel):
     day_target_c: Optional[float] = Field(None, ge=-50.0, le=80.0)
     night_target_c: Optional[float] = Field(None, ge=-50.0, le=80.0)
     hysteresis_c: Optional[float] = Field(None, ge=0.0, le=20.0)
-    day_start: Optional[str] = Field(None, regex=r"^([01]?\d|2[0-3]):[0-5]\d$")
-    night_start: Optional[str] = Field(None, regex=r"^([01]?\d|2[0-3]):[0-5]\d$")
+    day_start: Optional[str] = Field(None, pattern=r"^([01]?\d|2[0-3]):[0-5]\d$")
+    night_start: Optional[str] = Field(None, pattern=r"^([01]?\d|2[0-3]):[0-5]\d$")
 
     class Config:
         extra = "forbid"

@@ -24,6 +24,13 @@ def _controller():
     return controller
 
 
+def _update_manager():
+    """Lazy reference to the update manager instance from FastAPI app."""
+    from backend.app import update_manager  # lazy import to avoid circular deps
+
+    return update_manager
+
+
 router = APIRouter()
 
 

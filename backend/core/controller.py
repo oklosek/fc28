@@ -850,9 +850,14 @@ class Controller:
         prev = self.mode
         self.mode = mode
         with SessionLocal() as s:
-            s.merge(RuntimeState(key="mode", value=self.mode)); s.commit()
-            s.add(EventLog(level="INFO", event="MODE_CHANGE", meta={"mode": self.mode})); s.commit()
+            s.merge(RuntimeState(key="mode", value=self.mode))
+            s.commit()
         if prev != mode:
+            self._log_event(
+                "MODE_CHANGE",
+                meta={"mode": self.mode},
+                category="mode",
+            )
             if mode == "manual":
                 # zatrzymaj wszystkie ruchy i wyrĂłwnaj cele do bieĹĽÄ…cej pozycji
                 async def _stop_all():
@@ -1060,6 +1065,15 @@ class Controller:
             test_mode.record_manual_action({"type": "manual_all", "targets": [vent.id for vent in self.vents.values()], "value": float(pct)})
         except Exception:  # pragma: no cover - diagnostics only
             pass
+        self._log_event(
+            "MANUAL_ACTION",
+            meta={
+                "scope": "all",
+                "value": float(pct),
+                "targets": [vent.id for vent in self.vents.values()],
+            },
+            category="mode",
+        )
         return True
 
     def manual_set_group(self, group_id: str, pct: float) -> bool:
@@ -1085,6 +1099,16 @@ class Controller:
             test_mode.record_manual_action({"type": "manual_group", "group_id": group_id, "targets": list(group.get("vents", [])), "value": float(pct)})
         except Exception:  # pragma: no cover - diagnostics only
             pass
+        self._log_event(
+            "MANUAL_ACTION",
+            meta={
+                "scope": "group",
+                "group": group_id,
+                "value": float(pct),
+                "targets": list(group.get("vents", [])),
+            },
+            category="mode",
+        )
         return True
 
     def manual_set_one(self, vent_id: int, pct: float):
@@ -1108,6 +1132,15 @@ class Controller:
             test_mode.record_manual_action({"type": "manual_vent", "targets": [vent_id], "value": float(pct)})
         except Exception:  # pragma: no cover - diagnostics only
             pass
+        self._log_event(
+            "MANUAL_ACTION",
+            meta={
+                "scope": "vent",
+                "vent": vent_id,
+                "value": float(pct),
+            },
+            category="mode",
+        )
         return True
 
     def mark_error(self, vent_id: int, state: bool):

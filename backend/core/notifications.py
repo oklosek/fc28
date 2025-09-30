@@ -1,7 +1,8 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Notification utilities for recording and retrieving user-facing events."""
 from __future__ import annotations
 
+import json
 from typing import Dict, Iterable, List, Optional
 
 from backend.core.db import EventLog, SessionLocal, Setting
@@ -40,8 +41,13 @@ def _resolve_category(event: str, category: Optional[str]) -> str:
     return EVENT_CATEGORIES.get(event, "system")
 
 
-def log_event(event: str, *, level: str = "INFO", meta: Optional[Dict[str, object]] = None,
-              category: Optional[str] = None) -> None:
+def log_event(
+    event: str,
+    *,
+    level: str = "INFO",
+    meta: Optional[Dict[str, object]] = None,
+    category: Optional[str] = None,
+) -> None:
     """Persist a notification event to the database."""
     resolved = _resolve_category(event, category)
     payload = dict(meta or {})
@@ -70,14 +76,16 @@ def list_notifications(limit: int = 50, categories: Optional[Iterable[str]] = No
             category = _resolve_category(row.event, None)
         if selected and category not in selected:
             continue
-        events.append({
-            "id": row.id,
-            "timestamp": row.ts.isoformat() if row.ts else None,
-            "level": row.level,
-            "event": row.event,
-            "meta": row.meta or {},
-            "category": category,
-        })
+        events.append(
+            {
+                "id": row.id,
+                "timestamp": row.ts.isoformat() if row.ts else None,
+                "level": row.level,
+                "event": row.event,
+                "meta": row.meta or {},
+                "category": category,
+            }
+        )
     return events
 
 
@@ -88,9 +96,14 @@ def get_notification_preferences() -> Dict[str, bool]:
             if not row or not row.value:
                 return dict(DEFAULT_PREFERENCES)
             stored = row.value
+            if isinstance(stored, str):
+                try:
+                    stored = json.loads(stored)
+                except json.JSONDecodeError:
+                    stored = None
             if isinstance(stored, dict):
                 base = dict(DEFAULT_PREFERENCES)
-                base.update({k: bool(v) for k, v in stored.items()})
+                base.update({k: bool(v) for k, v in stored.items() if k in base})
                 return base
     except Exception:
         pass
@@ -101,8 +114,13 @@ def set_notification_preferences(prefs: Dict[str, bool]) -> Dict[str, bool]:
     merged = dict(DEFAULT_PREFERENCES)
     merged.update({k: bool(v) for k, v in prefs.items() if k in merged})
     try:
+        payload = json.dumps(merged)
+    except (TypeError, ValueError):
+        payload = json.dumps(DEFAULT_PREFERENCES)
+        merged = dict(DEFAULT_PREFERENCES)
+    try:
         with SessionLocal() as session:
-            session.merge(Setting(key="notifications.preferences", value=merged))
+            session.merge(Setting(key="notifications.preferences", value=payload))
             session.commit()
     except Exception:
         pass

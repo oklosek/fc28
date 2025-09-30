@@ -1,11 +1,17 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 # backend/routers/api.py - REST API for dashboard
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 
 from backend.core.config import CONTROL
 from backend.core.db import SessionLocal, SensorLog, Setting
+from backend.core.notifications import (
+    DEFAULT_PREFERENCES,
+    get_notification_preferences,
+    list_notifications,
+    set_notification_preferences,
+)
 from backend.core.mqtt_client import sensor_bus
 from backend.core.schemas import (
     HeatingConfigDTO,
@@ -105,6 +111,34 @@ def get_history(limit: int = Query(200, ge=10, le=2000)):
     return [SensorHistoryDTO(ts=row.ts, name=row.name, value=row.value) for row in rows]
 
 
+@router.get("/notifications")
+def get_notifications(
+    limit: int = Query(50, ge=1, le=200),
+    categories: Optional[List[str]] = Query(None),
+):
+    notifications = list_notifications(limit=limit, categories=categories)
+    return {"notifications": notifications}
+
+
+@router.get("/notifications/preferences")
+def get_notification_preferences_handler():
+    prefs = get_notification_preferences()
+    return {"preferences": prefs, "defaults": DEFAULT_PREFERENCES}
+
+
+@router.post("/notifications/preferences")
+def update_notification_preferences_handler(payload: Dict[str, bool]):
+    prefs_payload = None
+    if isinstance(payload.get("preferences"), dict):
+        prefs_payload = payload.get("preferences")
+    elif isinstance(payload, dict):
+        prefs_payload = payload
+    if not isinstance(prefs_payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    updated = set_notification_preferences(prefs_payload)
+    return {"preferences": updated}
+
+
 @router.post("/control")
 def update_control(payload: Dict[str, float | int | bool]):
     controller = _controller()
@@ -167,6 +201,8 @@ def update_binary(_: None = Depends(require_admin)):
     if not result.get("ok"):
         return {"ok": False, "msg": result.get("detail", "Update failed")}
     return {"ok": True, "msg": "Update applied", "status": result.get("status")}
+
+
 
 
 

@@ -31,6 +31,16 @@ const updateError = $("#updateError");
 const runUpdateBtn = $("#runUpdateBtn");
 const checkUpdateBtn = $("#checkUpdateBtn");
 
+const tabsNav = $("#dashboardTabs");
+const panelTabs = tabsNav ? Array.from(tabsNav.querySelectorAll(".panel-tab")) : [];
+const panelContainers = Array.from(document.querySelectorAll(".panel"));
+const notificationList = $("#notificationList");
+const notificationEmpty = $("#notificationsEmpty");
+const notificationFiltersForm = $("#notificationFiltersForm");
+const refreshNotificationsBtn = $("#refreshNotificationsBtn");
+const notificationPrefsForm = $("#notificationPrefsForm");
+const notificationPrefsStatus = $("#notificationPrefsStatus");
+
 let mode = "auto";
 let vents = [];
 let groups = [];
@@ -41,6 +51,11 @@ let adminToken = "";
 let bulkActionInProgress = false;
 let updateStatus = null;
 let updateNotifiedVersion = null;
+
+let notificationPreferences = {};
+let notificationFilters = new Set();
+let notificationsCache = [];
+let notificationsTimer = null;
 
 const SENSOR_META = {
   internal_temp: { label: "Internal temperature", unit: "C", digits: 1 },
@@ -70,6 +85,24 @@ const CONTROL_FIELDS = [
   { key: "crit_hum_crack_percent", label: "Crack percent at high humidity (%)", step: "1", parser: parseFloat, decimals: 0, unit: "%" },
 ];
 
+const NOTIFICATION_DEFAULTS = {
+  network: true,
+  mode: true,
+  wind: true,
+  updates: true,
+  environment: true,
+  system: true,
+};
+
+const NOTIFICATION_CATEGORY_LABELS = {
+  network: "Siec i serwer",
+  mode: "Tryb pracy",
+  wind: "Silny wiatr",
+  updates: "Aktualizacje",
+  environment: "Srodowisko",
+  system: "System",
+};
+
 function normalizePercent(value, fallback = 0) {
   const num = Number(value);
   if (!Number.isFinite(num)) {
@@ -94,6 +127,57 @@ function averagePercent(items, getter) {
   return count ? sum / count : 0;
 }
 
+
+function bindImmediateRange(range, onCommit) {
+  if (!range || typeof onCommit !== "function") {
+    return;
+  }
+  let pointerActive = false;
+  let pointerCommit = false;
+
+  const execute = async () => {
+    try {
+      await onCommit();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  if (window.PointerEvent) {
+    range.addEventListener("pointerdown", () => { pointerActive = true; });
+    range.addEventListener("pointerup", async () => {
+      pointerActive = false;
+      pointerCommit = true;
+      await execute();
+    });
+    range.addEventListener("pointercancel", () => { pointerActive = false; });
+  } else {
+    range.addEventListener("mousedown", () => { pointerActive = true; });
+    range.addEventListener("mouseup", async () => {
+      if (!pointerActive) return;
+      pointerActive = false;
+      pointerCommit = true;
+      await execute();
+    });
+    range.addEventListener("touchstart", () => { pointerActive = true; }, { passive: true });
+    range.addEventListener("touchend", async () => {
+      pointerActive = false;
+      pointerCommit = true;
+      await execute();
+    }, { passive: true });
+    range.addEventListener("touchcancel", () => { pointerActive = false; }, { passive: true });
+  }
+
+  range.addEventListener("change", async () => {
+    if (pointerCommit) {
+      pointerCommit = false;
+      return;
+    }
+    if (!pointerActive) {
+      await execute();
+    }
+  });
+}
 
 function showMessage(text, type = "info", timeout = 4000) {
   if (!messageEl) return;
@@ -359,7 +443,7 @@ function renderVentSliders() {
           targetLabel.textContent = `cel: ${val}%`;
         }
       });
-      slider.addEventListener("change", async () => {
+      bindImmediateRange(slider, async () => {
         const pos = normalizePercent(slider.value);
         await sendVentPosition(vent.id, pos);
       });
@@ -403,7 +487,7 @@ function renderGroupSliders() {
           label.textContent = `cel: ${val}%`;
         }
       });
-      slider.addEventListener("change", async () => {
+      bindImmediateRange(slider, async () => {
         const pos = normalizePercent(slider.value);
         await sendGroupPosition(group.id, pos);
       });
@@ -760,6 +844,381 @@ async function submitControlForm(event) {
   }
 }
 
+function notificationCategoryLabel(category) {
+  return NOTIFICATION_CATEGORY_LABELS[category] || category || "system";
+}
+
+function notificationLevelClass(level) {
+  const value = String(level || "INFO").toUpperCase();
+  if (value === "ERROR" || value === "ERR") {
+    return "badge level-error";
+  }
+  if (value === "WARN" || value === "WARNING") {
+    return "badge level-warning";
+  }
+  return "badge level-info";
+}
+
+function describeNotificationEntry(entry) {
+  const event = entry && entry.event ? entry.event : "";
+  const meta = entry && typeof entry.meta === "object" && entry.meta ? entry.meta : {};
+  const result = { title: event || "Zdarzenie", description: null };
+  switch (event) {
+    case "NETWORK_OFFLINE":
+      result.title = "Utrata polaczenia z internetem";
+      result.description = "Sprawdz lacze sieciowe sterownika.";
+      break;
+    case "NETWORK_ONLINE":
+      result.title = "Polaczenie z internetem przywrocone";
+      break;
+    case "SERVER_UNREACHABLE": {
+      result.title = "Serwer aktualizacji nie odpowiada";
+      const parts = [];
+      if (meta.status !== undefined) {
+        parts.push(`Kod: ${meta.status}`);
+      }
+      if (meta.detail) {
+        parts.push(String(meta.detail));
+      }
+      result.description = parts.length ? parts.join(". ") : null;
+      break;
+    }
+    case "MODE_CHANGE":
+      if (meta.mode === "manual") {
+        result.title = "Wlaczono tryb reczny";
+      } else if (meta.mode === "auto") {
+        result.title = "Wlaczono tryb automatyczny";
+      } else {
+        result.title = "Zmieniono tryb pracy";
+      }
+      break;
+    case "MANUAL_ACTION": {
+      const scope = meta.scope;
+      if (scope === "all") {
+        result.title = "Reczna zmiana wszystkich wietrznikow";
+      } else if (scope === "group") {
+        result.title = meta.group ? `Reczna zmiana grupy ${meta.group}` : "Reczna zmiana grupy";
+      } else if (scope === "vent") {
+        result.title = meta.vent ? `Reczna zmiana wietrznika #${meta.vent}` : "Reczne sterowanie wietrznikiem";
+      } else {
+        result.title = "Reczne sterowanie";
+      }
+      const parts = [];
+      if (Number.isFinite(Number(meta.value))) {
+        parts.push(`Nowy cel: ${normalizePercent(meta.value)}%`);
+      }
+      if (Array.isArray(meta.targets) && meta.targets.length) {
+        parts.push(`Dotyczy: ${meta.targets.join(", ")}`);
+      }
+      result.description = parts.length ? parts.join(". ") : null;
+      break;
+    }
+    case "WIND_LOCK_ON": {
+      result.title = "Ograniczenie otwarcia przez wiatr";
+      const parts = [];
+      if (meta.group) {
+        parts.push(`Grupa: ${meta.group}`);
+      }
+      if (Number.isFinite(Number(meta.wind_direction))) {
+        parts.push(`Kierunek wiatru: ${Math.round(Number(meta.wind_direction))} deg`);
+      }
+      result.description = parts.length ? parts.join(". ") : null;
+      break;
+    }
+    case "WIND_LOCK_OFF":
+      result.title = "Przywrocono normalne otwarcie";
+      if (meta.group) {
+        result.description = `Grupa: ${meta.group}`;
+      }
+      break;
+    case "UPDATE_AVAILABLE": {
+      const version = meta.version ? String(meta.version) : null;
+      result.title = version ? `Dostepna aktualizacja ${version}` : "Dostepna aktualizacja";
+      if (meta.channel) {
+        result.description = `Kanal: ${meta.channel}`;
+      }
+      break;
+    }
+    case "UPDATE_APPLIED": {
+      const version = meta.version ? String(meta.version) : null;
+      result.title = version ? `Zainstalowano aktualizacje ${version}` : "Zainstalowano aktualizacje";
+      if (meta.artifact) {
+        result.description = `Pakiet: ${meta.artifact}`;
+      }
+      break;
+    }
+    case "UPDATE_FAILED":
+      result.title = "Blad aktualizacji";
+      if (meta.detail) {
+        result.description = String(meta.detail);
+      }
+      break;
+    case "UPDATE_UP_TO_DATE":
+      result.title = "System jest aktualny";
+      break;
+    case "CO2_HIGH": {
+      result.title = "Wysokie stezenie CO2";
+      if (meta.value !== undefined) {
+        result.description = `Wartosc: ${meta.value}`;
+      }
+      break;
+    }
+    case "CO2_NORMAL":
+      result.title = "Stezenie CO2 w normie";
+      break;
+    case "HEATING_ON":
+      result.title = "Wlaczono ogrzewanie";
+      if (meta.topic) {
+        result.description = `Kanal: ${meta.topic}`;
+      }
+      break;
+    case "HEATING_OFF":
+      result.title = "Wylaczono ogrzewanie";
+      if (meta.topic) {
+        result.description = `Kanal: ${meta.topic}`;
+      }
+      break;
+    default:
+      if (event) {
+        result.title = event;
+      }
+      if (Object.keys(meta).length) {
+        try {
+          result.description = JSON.stringify(meta);
+        } catch (err) {
+          result.description = String(meta);
+        }
+      }
+      break;
+  }
+  return result;
+}
+
+function renderNotifications(items) {
+  if (!notificationList) {
+    return;
+  }
+  notificationList.innerHTML = "";
+  if (!items || !items.length) {
+    if (notificationEmpty) {
+      notificationEmpty.textContent = "Brak powiadomien do wyswietlenia.";
+      notificationEmpty.classList.remove("hidden");
+    }
+    return;
+  }
+  if (notificationEmpty) {
+    notificationEmpty.textContent = "Brak powiadomien do wyswietlenia.";
+    notificationEmpty.classList.add("hidden");
+  }
+  items.forEach((entry) => {
+    const { title, description } = describeNotificationEntry(entry);
+    const li = document.createElement("li");
+    li.className = "notification-item";
+
+    const header = document.createElement("div");
+    header.className = "notification-header";
+    const titleEl = document.createElement("span");
+    titleEl.className = "notification-title";
+    titleEl.textContent = title;
+    const timeEl = document.createElement("span");
+    timeEl.className = "notification-time";
+    timeEl.textContent = formatTimestamp(entry.timestamp);
+    header.append(titleEl, timeEl);
+
+    const tags = document.createElement("div");
+    tags.className = "notification-tags";
+    const categoryBadge = document.createElement("span");
+    categoryBadge.className = "badge";
+    categoryBadge.textContent = notificationCategoryLabel(entry.category);
+    const levelBadge = document.createElement("span");
+    levelBadge.className = notificationLevelClass(entry.level);
+    levelBadge.textContent = String(entry.level || "INFO").toUpperCase();
+    tags.append(categoryBadge, levelBadge);
+
+    li.append(header, tags);
+    if (description) {
+      const desc = document.createElement("p");
+      desc.className = "notification-description";
+      desc.textContent = description;
+      li.append(desc);
+    }
+    notificationList.appendChild(li);
+  });
+}
+
+function updateNotificationFiltersSet() {
+  notificationFilters.clear();
+  const categories = Object.keys(NOTIFICATION_DEFAULTS);
+  if (!notificationFiltersForm) {
+    categories.forEach((cat) => notificationFilters.add(cat));
+    return;
+  }
+  const selected = Array.from(
+    notificationFiltersForm.querySelectorAll("input[data-category]:checked")
+  )
+    .map((input) => input.dataset.category)
+    .filter(Boolean);
+  if (!selected.length) {
+    categories.forEach((cat) => notificationFilters.add(cat));
+  } else {
+    selected.forEach((cat) => notificationFilters.add(cat));
+  }
+}
+
+function applyNotificationPreferencesToUI(prefs) {
+  notificationPreferences = { ...NOTIFICATION_DEFAULTS, ...(prefs || {}) };
+  if (notificationPrefsForm) {
+    Object.keys(NOTIFICATION_DEFAULTS).forEach((key) => {
+      const input = notificationPrefsForm.querySelector(`input[name="${key}"]`);
+      if (input) {
+        input.checked = Boolean(notificationPreferences[key]);
+      }
+    });
+  }
+  if (notificationFiltersForm) {
+    Object.keys(NOTIFICATION_DEFAULTS).forEach((key) => {
+      const input = notificationFiltersForm.querySelector(`input[data-category="${key}"]`);
+      if (input) {
+        input.checked = Boolean(notificationPreferences[key]);
+      }
+    });
+  }
+  updateNotificationFiltersSet();
+}
+
+async function fetchNotifications() {
+  if (!notificationList) {
+    return;
+  }
+  try {
+    const params = new URLSearchParams();
+    params.set("limit", "100");
+    const categories = Array.from(notificationFilters);
+    if (categories.length && categories.length < Object.keys(NOTIFICATION_DEFAULTS).length) {
+      categories.forEach((cat) => params.append("categories", cat));
+    }
+    const response = await fetch(`/api/notifications?${params.toString()}`);
+    if (!response.ok) {
+      throw new Error(`status ${response.status}`);
+    }
+    const data = await response.json();
+    notificationsCache = Array.isArray(data.notifications) ? data.notifications : [];
+    renderNotifications(notificationsCache);
+  } catch (err) {
+    console.error(err);
+    if (notificationEmpty) {
+      notificationEmpty.textContent = "Nie udalo sie pobrac powiadomien.";
+      notificationEmpty.classList.remove("hidden");
+    }
+    renderNotifications([]);
+    showMessage("Nie udalo sie pobrac powiadomien", "error");
+  }
+}
+
+async function loadNotificationPreferences() {
+  try {
+    const response = await fetch("/api/notifications/preferences");
+    if (!response.ok) {
+      throw new Error(`status ${response.status}`);
+    }
+    const data = await response.json();
+    const prefs = data && typeof data.preferences === "object" ? data.preferences : {};
+    applyNotificationPreferencesToUI(prefs);
+  } catch (err) {
+    console.error(err);
+    applyNotificationPreferencesToUI(NOTIFICATION_DEFAULTS);
+    showMessage("Nie udalo sie pobrac preferencji powiadomien", "error");
+  }
+  await fetchNotifications();
+  if (notificationsTimer === null) {
+    notificationsTimer = setInterval(fetchNotifications, 60000);
+  }
+}
+
+async function saveNotificationPreferences(event) {
+  event.preventDefault();
+  if (!notificationPrefsForm) {
+    return;
+  }
+  const payload = {};
+  Object.keys(NOTIFICATION_DEFAULTS).forEach((key) => {
+    const input = notificationPrefsForm.querySelector(`input[name="${key}"]`);
+    payload[key] = input ? input.checked : true;
+  });
+  if (notificationPrefsStatus) {
+    notificationPrefsStatus.textContent = "Zapisywanie...";
+    notificationPrefsStatus.className = "info";
+  }
+  try {
+    const response = await fetch("/api/notifications/preferences", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      throw new Error(`status ${response.status}`);
+    }
+    const data = await response.json();
+    const prefs = data && typeof data.preferences === "object" ? data.preferences : payload;
+    applyNotificationPreferencesToUI(prefs);
+    if (notificationPrefsStatus) {
+      notificationPrefsStatus.textContent = "Zapisano";
+      notificationPrefsStatus.className = "success";
+    }
+    showMessage("Zapisano preferencje powiadomien", "success");
+    fetchNotifications();
+  } catch (err) {
+    console.error(err);
+    if (notificationPrefsStatus) {
+      notificationPrefsStatus.textContent = "Blad zapisu";
+      notificationPrefsStatus.className = "error";
+    }
+    showMessage("Nie udalo sie zapisac preferencji powiadomien", "error");
+  }
+}
+
+function initTabs() {
+  if (!panelTabs.length || !panelContainers.length) {
+    return;
+  }
+  const showPanel = (target) => {
+    panelContainers.forEach((panel) => {
+      const isActive = panel.dataset.panel === target;
+      panel.classList.toggle("active", isActive);
+    });
+    panelTabs.forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.target === target);
+    });
+    if (target === "notifications") {
+      fetchNotifications();
+    }
+  };
+  const current = panelTabs.find((btn) => btn.classList.contains("active"))?.dataset.target || "overview";
+  panelTabs.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      showPanel(btn.dataset.target);
+    });
+  });
+  showPanel(current);
+}
+
+if (notificationFiltersForm) {
+  notificationFiltersForm.addEventListener("change", () => {
+    updateNotificationFiltersSet();
+    fetchNotifications();
+  });
+}
+
+if (refreshNotificationsBtn) {
+  refreshNotificationsBtn.addEventListener("click", () => {
+    fetchNotifications();
+  });
+}
+
+if (notificationPrefsForm) {
+  notificationPrefsForm.addEventListener("submit", saveNotificationPreferences);
+}
+
 if (allRange) {
   allRange.addEventListener("input", () => {
     const val = normalizePercent(allRange.value);
@@ -767,7 +1226,7 @@ if (allRange) {
       allVal.textContent = `cel: ${val}%`;
     }
   });
-  allRange.addEventListener("change", async () => {
+  bindImmediateRange(allRange, async () => {
     if (mode !== "manual") {
       showMessage("Switch to manual mode to control position", "warning");
       return;
@@ -823,12 +1282,17 @@ if (refreshHistoryBtn) {
   });
 }
 
+initTabs();
+if (notificationFiltersForm) {
+  updateNotificationFiltersSet();
+}
 loadToken();
 buildControlForm({});
 updateModeUI();
 fetchUpdateStatus();
 fetchState();
 fetchHistory(parseInt(historyLimitInput.value, 10) || 100);
+loadNotificationPreferences();
 setInterval(fetchState, 3000);
 setInterval(fetchUpdateStatus, 15 * 60 * 1000);
 setInterval(() => {
@@ -838,6 +1302,7 @@ setInterval(() => {
   );
   fetchHistory(limit);
 }, 30000);
+
 
 
 

@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Background update manager responsible for periodic version checks."""
 from __future__ import annotations
 
@@ -17,6 +17,8 @@ from sqlalchemy.exc import OperationalError
 
 from backend.core.config import BASE_DIR, UPDATES
 from backend.core.db import SessionLocal, Setting
+from backend.core.notifications import log_event
+
 
 DEFAULT_TIMEOUT = 10
 
@@ -54,7 +56,15 @@ class UpdateManager:
             "channel": self.channel,
             "last_applied": None,
         }
+        self._connectivity_state: Optional[str] = None
+        self._last_server_issue: Optional[tuple[Optional[int], Optional[str]]] = None
+        self._notified_available_version: Optional[str] = None
+        self._last_error_message: Optional[str] = None
         self._load_state()
+        if self._state.get("available"):
+            self._notified_available_version = self._state.get("latest_version")
+        if self._state.get("error"):
+            self._last_error_message = self._state.get("error")
 
     # ------------------------------------------------------------------
     # Lifecycle management
@@ -100,9 +110,25 @@ class UpdateManager:
 
         try:
             manifest = self._fetch_manifest()
-        except Exception as exc:  # pragma: no cover - network failure path
+        except HTTPError as exc:  # pragma: no cover - remote server issues
+            status_code = getattr(exc, "code", None)
+            reason = getattr(exc, "reason", None)
+            status_val = int(status_code) if isinstance(status_code, int) else None
+            detail = str(reason) if reason else None
+            self._record_server_issue(status_val, detail)
+            self._set_error(f"Manifest HTTP error: {exc}")
+            return self.status()
+        except URLError as exc:  # pragma: no cover - network failure path
+            reason = getattr(exc, "reason", exc)
+            self._signal_connectivity(False, detail=str(reason))
+            self._set_error(f"Manifest network error: {exc}")
+            return self.status()
+        except Exception as exc:
             self._set_error(f"Manifest error: {exc}")
             return self.status()
+
+        self._signal_connectivity(True)
+        self._last_server_issue = None
 
         latest_version = str(
             manifest.get("version")
@@ -119,7 +145,10 @@ class UpdateManager:
         checksum = manifest.get("checksum")
         channel = manifest.get("channel") or self.channel
 
-        available = self._is_newer(latest_version, self._state["current_version"])
+        with self._lock:
+            current_version = self._state.get("current_version", self.current_version)
+            prev_available = bool(self._state.get("available"))
+        available = self._is_newer(latest_version, current_version)
         with self._lock:
             self._state.update(
                 {
@@ -133,7 +162,25 @@ class UpdateManager:
                     "last_checked": datetime.now(timezone.utc).isoformat(),
                 }
             )
+        self._last_error_message = None
         self._save_state()
+
+        if available:
+            if latest_version:
+                if self._notified_available_version != latest_version:
+                    meta = {"version": latest_version}
+                    if channel:
+                        meta["channel"] = channel
+                    log_event("UPDATE_AVAILABLE", meta=meta, category="updates")
+                self._notified_available_version = latest_version
+        else:
+            if prev_available:
+                meta = {"version": latest_version or current_version}
+                if channel:
+                    meta["channel"] = channel
+                log_event("UPDATE_UP_TO_DATE", meta=meta, category="updates")
+            self._notified_available_version = None
+
         return self.status()
 
     def run_update(self) -> Dict[str, Any]:
@@ -150,9 +197,24 @@ class UpdateManager:
         if download_url:
             try:
                 artifact_path = self._download_package(download_url)
-            except Exception as exc:  # pragma: no cover - network failure path
+            except HTTPError as exc:  # pragma: no cover - remote server issues
+                status_code = getattr(exc, "code", None)
+                reason = getattr(exc, "reason", None)
+                status_val = int(status_code) if isinstance(status_code, int) else None
+                detail = str(reason) if reason else None
+                self._record_server_issue(status_val, detail)
                 self._set_error(f"Download failed: {exc}")
                 return {"ok": False, "detail": f"Download failed: {exc}"}
+            except URLError as exc:  # pragma: no cover - network failure path
+                reason = getattr(exc, "reason", exc)
+                self._signal_connectivity(False, detail=str(reason))
+                self._set_error(f"Download failed: {exc}")
+                return {"ok": False, "detail": f"Download failed: {exc}"}
+            except Exception as exc:  # pragma: no cover - unexpected failure path
+                self._set_error(f"Download failed: {exc}")
+                return {"ok": False, "detail": f"Download failed: {exc}"}
+            else:
+                self._signal_connectivity(True)
 
         try:
             self._execute_install(artifact_path)
@@ -171,16 +233,55 @@ class UpdateManager:
                 }
             )
         self._save_state()
+        self._last_error_message = None
+        self._notified_available_version = None
+        meta = {"version": latest_version}
+        if artifact_path:
+            meta["artifact"] = str(artifact_path)
+        log_event("UPDATE_APPLIED", meta=meta, category="updates")
         return {"ok": True, "status": self.status(), "artifact": str(artifact_path) if artifact_path else None}
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+    def _signal_connectivity(self, online: bool, detail: Optional[str] = None) -> None:
+        state = "online" if online else "offline"
+        if self._connectivity_state == state:
+            return
+        self._connectivity_state = state
+        meta = {"source": "update_manager"}
+        if detail:
+            meta["detail"] = str(detail)
+        event = "NETWORK_ONLINE" if online else "NETWORK_OFFLINE"
+        log_event(event, meta=meta, category="network")
+
+    def _record_server_issue(
+        self,
+        status: Optional[int],
+        detail: Optional[str] = None,
+    ) -> None:
+        key = (status, detail)
+        if self._last_server_issue == key:
+            return
+        self._last_server_issue = key
+        meta = {"source": "update_manager"}
+        if status is not None:
+            try:
+                meta["status"] = int(status)
+            except (TypeError, ValueError):
+                pass
+        if detail:
+            meta["detail"] = detail
+        log_event("SERVER_UNREACHABLE", meta=meta, category="network")
+
     def _set_error(self, message: str) -> None:
         with self._lock:
             self._state["error"] = message
             self._state["last_checked"] = datetime.now(timezone.utc).isoformat()
         self._save_state()
+        if message and message != self._last_error_message:
+            log_event("UPDATE_FAILED", meta={"detail": message}, category="updates")
+        self._last_error_message = message
 
     def _load_state(self) -> None:
         try:
@@ -276,3 +377,8 @@ class UpdateManager:
 
 
 __all__ = ["UpdateManager"]
+
+
+
+
+

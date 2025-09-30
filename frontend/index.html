@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="pl">
 <head>
   <meta charset="utf-8"/>
@@ -10,91 +10,163 @@
   <header>
     <div>
       <h1>FarmCare 2.0 - Dashboard</h1>
-      <p id="modeIndicator">Mode: --</p>
-      <button id="modeBtn">Toggle mode</button>
+      <p id="modeIndicator">Tryb: --</p>
+      <button id="modeBtn" type="button">Przelacz tryb</button>
     </div>
     <div class="admin-tools">
-      <label>Admin token
+      <label>Token administratora
         <input type="password" id="tokenInput" placeholder="x-admin-token"/>
       </label>
-      <button id="saveTokenBtn">Save token</button>
+      <button id="saveTokenBtn" type="button">Zapisz token</button>
       <span id="tokenStatus" class="info"></span>
     </div>
   </header>
 
+  <nav id="dashboardTabs" class="panel-switcher">
+    <button type="button" class="panel-tab active" data-target="overview">Przeglad</button>
+    <button type="button" class="panel-tab" data-target="history">Historia</button>
+    <button type="button" class="panel-tab" data-target="notifications">Powiadomienia</button>
+    <button type="button" class="panel-tab" data-target="settings">Ustawienia</button>
+  </nav>
+
   <section id="message" class="hidden"></section>
 
-  <section id="updateSection" class="hidden">
-    <div class="update-header">
-      <h2>Aktualizacja systemu</h2>
-      <span id="updateBadge" class="update-available-badge hidden">Nowa wersja</span>
+  <main>
+    <div class="panel active" data-panel="overview">
+      <section id="updateSection" class="hidden">
+        <div class="update-header">
+          <h2>Aktualizacja systemu</h2>
+          <span id="updateBadge" class="update-available-badge hidden">Nowa wersja</span>
+        </div>
+        <p id="updateInfo">Aktualny stan aktualizacji nie jest jeszcze dostepny.</p>
+        <p id="updateNotes" class="muted hidden"></p>
+        <p id="updateMeta" class="update-meta"></p>
+        <p id="updateError" class="update-error hidden"></p>
+        <div class="update-actions">
+          <button id="checkUpdateBtn" type="button" class="secondary">Sprawdz teraz</button>
+          <button id="runUpdateBtn" type="button" class="primary">Zainstaluj aktualizacje</button>
+        </div>
+      </section>
+
+      <section id="sensors">
+        <h2>Biezace odczyty</h2>
+        <div class="cards" id="sensorCards"></div>
+      </section>
+
+      <section id="configSummary">
+        <h2>Ustawienia kontrolera</h2>
+        <div class="cards" id="configCards"></div>
+      </section>
+
+      <section id="vents">
+        <h2>Reczne sterowanie wietrznikami</h2>
+        <div class="control-block">
+          <label>Wszystkie wietrzniki</label>
+          <div class="slider-row">
+            <input type="range" id="allRange" min="0" max="100" value="0"/>
+            <span id="allVal" class="target">cel: 0%</span>
+            <span id="allActual" class="actual">aktualnie: 0%</span>
+          </div>
+          <div class="bulk-actions">
+            <button type="button" id="openAllBtn">OTWORZ WSZYSTKIE</button>
+            <button type="button" id="closeAllBtn">ZAMKNIJ WSZYSTKIE</button>
+          </div>
+        </div>
+        <div id="groupList" class="group-list"></div>
+        <div id="ventList" class="vent-list"></div>
+      </section>
     </div>
-    <p id="updateInfo">Aktualny stan aktualizacji nie jest jeszcze dostępny.</p>
-    <p id="updateNotes" class="muted hidden"></p>
-    <p id="updateMeta" class="update-meta"></p>
-    <p id="updateError" class="update-error hidden"></p>
-    <div class="update-actions">
-      <button id="checkUpdateBtn" type="button" class="secondary">Sprawdź teraz</button>
-      <button id="runUpdateBtn" type="button" class="primary">Zainstaluj aktualizację</button>
+
+    <div class="panel" data-panel="history">
+      <section id="history">
+        <h2>Historia czujnikow</h2>
+        <div class="history-controls">
+          <label>Liczba wpisow
+            <input type="number" id="historyLimit" min="10" max="500" step="10" value="100"/>
+          </label>
+          <button id="refreshHistoryBtn" type="button">Odswiez</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Czas</th>
+              <th>Czujnik</th>
+              <th>Wartosc</th>
+            </tr>
+          </thead>
+          <tbody id="historyBody"></tbody>
+        </table>
+      </section>
     </div>
-  </section>
 
-  <section id="sensors">
-    <h2>Current readings</h2>
-    <div class="cards" id="sensorCards"></div>
-  </section>
-
-  <section id="configSummary">
-    <h2>Controller targets</h2>
-    <div class="cards" id="configCards"></div>
-  </section>
-
-  <section id="vents">
-    <h2>Manual vent control</h2>
-    <div class="control-block">
-      <label>All vents</label>
-      <div class="slider-row">
-        <input type="range" id="allRange" min="0" max="100" value="0"/>
-        <span id="allVal" class="target">cel: 0%</span>
-        <span id="allActual" class="actual">aktualnie: 0%</span>
-      </div>
-      <div class="bulk-actions">
-        <button type="button" id="openAllBtn">OTWÓRZ WSZYSTKO</button>
-        <button type="button" id="closeAllBtn">ZAMKNIJ WSZYSTKO</button>
-      </div>
+    <div class="panel" data-panel="notifications">
+      <section id="notificationsPanel">
+        <div class="notifications-header">
+          <h2>Powiadomienia</h2>
+          <div class="notification-controls">
+            <form id="notificationFiltersForm" class="notification-filters">
+              <label><input type="checkbox" data-category="network" checked/>Siec</label>
+              <label><input type="checkbox" data-category="mode" checked/>Tryb</label>
+              <label><input type="checkbox" data-category="wind" checked/>Wiatr</label>
+              <label><input type="checkbox" data-category="updates" checked/>Aktualizacje</label>
+              <label><input type="checkbox" data-category="environment" checked/>Srodowisko</label>
+              <label><input type="checkbox" data-category="system" checked/>System</label>
+            </form>
+            <button type="button" id="refreshNotificationsBtn" class="secondary">Odswiez</button>
+          </div>
+        </div>
+        <div id="notificationsEmpty" class="muted">Brak powiadomien do wyswietlenia.</div>
+        <ul id="notificationList" class="notification-list"></ul>
+      </section>
     </div>
-    <div id="groupList" class="group-list"></div>
-    <div id="ventList" class="vent-list"></div>
-  </section>
 
-  <section id="history">
-    <h2>Sensor history</h2>
-    <div class="history-controls">
-      <label>Entries
-        <input type="number" id="historyLimit" min="10" max="500" step="10" value="100"/>
-      </label>
-      <button id="refreshHistoryBtn">Refresh</button>
+    <div class="panel" data-panel="settings">
+      <section id="controlSettings">
+        <h2>Dostosuj kontroler</h2>
+        <form id="controlForm">
+          <div class="form-grid" id="controlFields"></div>
+          <button type="submit">Zapisz zmiany</button>
+          <span id="controlStatus" class="info"></span>
+        </form>
+      </section>
+
+      <section id="notificationSettings">
+        <h2>Preferencje powiadomien</h2>
+        <form id="notificationPrefsForm">
+          <div class="preferences-grid">
+            <label class="preference-card">
+              <span class="pref-title"><input type="checkbox" name="network"/>Siec i serwer</span>
+              <span class="pref-desc">Alarmy o braku internetu oraz problemy z serwerem aktualizacji.</span>
+            </label>
+            <label class="preference-card">
+              <span class="pref-title"><input type="checkbox" name="mode"/>Tryb pracy</span>
+              <span class="pref-desc">Zmiany trybu automatycznego i dzialania reczne uzytkownika.</span>
+            </label>
+            <label class="preference-card">
+              <span class="pref-title"><input type="checkbox" name="wind"/>Silny wiatr</span>
+              <span class="pref-desc">Blokady lub ograniczenia otwarcia spowodowane wiatrem.</span>
+            </label>
+            <label class="preference-card">
+              <span class="pref-title"><input type="checkbox" name="updates"/>Aktualizacje</span>
+              <span class="pref-desc">Informacje o nowych wersjach, instalacjach i bledach aktualizacji.</span>
+            </label>
+            <label class="preference-card">
+              <span class="pref-title"><input type="checkbox" name="environment"/>Srodowisko</span>
+              <span class="pref-desc">Alerty dotyczace CO2, ogrzewania i parametrow klimatu.</span>
+            </label>
+            <label class="preference-card">
+              <span class="pref-title"><input type="checkbox" name="system"/>System</span>
+              <span class="pref-desc">Pozostale wazne komunikaty systemowe.</span>
+            </label>
+          </div>
+          <div class="preferences-actions">
+            <button type="submit" class="primary">Zapisz preferencje</button>
+            <span id="notificationPrefsStatus" class="info"></span>
+          </div>
+        </form>
+      </section>
     </div>
-    <table>
-      <thead>
-        <tr>
-          <th>Timestamp</th>
-          <th>Sensor</th>
-          <th>Value</th>
-        </tr>
-      </thead>
-      <tbody id="historyBody"></tbody>
-    </table>
-  </section>
-
-  <section id="controlSettings">
-    <h2>Adjust controller</h2>
-    <form id="controlForm">
-      <div class="form-grid" id="controlFields"></div>
-      <button type="submit">Save changes</button>
-      <span id="controlStatus" class="info"></span>
-    </form>
-  </section>
+  </main>
 
   <script src="/static/farmcare.js"></script>
 </body>

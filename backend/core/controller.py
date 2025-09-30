@@ -302,8 +302,19 @@ class Controller:
             })
         self._plan = plan
 
+    def _log_event(self, event: str, *, level: str = "INFO", meta: Optional[dict] = None, category: Optional[str] = None) -> None:
+        payload = dict(meta or {})
+        if category:
+            payload.setdefault("category", category)
+        try:
+            with SessionLocal() as session:
+                session.add(EventLog(level=level, event=event, meta=payload or None))
+                session.commit()
+        except Exception:
+            log_event(event, level=level, meta=meta, category=category)
+
     def _log_wind_event(self, group_id: str, locked: bool, direction: Optional[float]) -> None:
-        log_event(
+        self._log_event(
             "WIND_LOCK_ON" if locked else "WIND_LOCK_OFF",
             meta={"group": group_id, "wind_direction": direction},
             category="wind",
@@ -449,7 +460,7 @@ class Controller:
         event = "CO2_HIGH" if active else "CO2_NORMAL"
         level = "WARN" if active else "INFO"
         meta = {"value": co2_value, "threshold": threshold}
-        log_event(event, level=level, meta=meta, category="environment")
+        self._log_event(event, level=level, meta=meta, category="environment")
 
     def _parse_time_of_day(self, value) -> Optional[dt_time]:
         if value is None:

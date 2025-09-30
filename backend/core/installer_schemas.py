@@ -57,7 +57,7 @@ class VentTopicConfig(BaseModel):
         extra = "forbid"
 
     @validator("up", "down", "error_in", pre=True)
-    def _trim_topics(_cls, value):  # noqa: D401 - simple normaliser
+    def _trim_topics(cls, value):  # noqa: D401 - simple normaliser
         if value is None:
             return value
         return str(value).strip()
@@ -78,7 +78,7 @@ class VentConfigPayload(BaseModel):
         extra = "forbid"
 
     @validator("name", "boneio_device", pre=True)
-    def _strip_strings(_cls, value):  # noqa: D401 - simple normaliser
+    def _strip_strings(cls, value):  # noqa: D401 - simple normaliser
         return str(value).strip()
 
 
@@ -92,7 +92,7 @@ class BoneIODeviceConfigPayload(BaseModel):
         extra = "forbid"
 
     @validator("id", "base_topic", "description", "availability_topic", pre=True)
-    def _strip_device_fields(_cls, value):  # noqa: D401 - normalize strings
+    def _strip_device_fields(cls, value):  # noqa: D401 - normalize strings
         if value is None:
             return value
         return str(value).strip()
@@ -110,17 +110,17 @@ class VentGroupPayload(BaseModel):
         extra = "forbid"
 
     @validator("id", "name", pre=True)
-    def _strip_group_strings(_cls, value):  # noqa: D401 - simple normaliser
+    def _strip_group_strings(cls, value):  # noqa: D401 - simple normaliser
         return str(value).strip()
 
     @validator("vents", each_item=True)
-    def _ensure_positive_vent_ids(_cls, value):  # noqa: D401 - simple validator
+    def _ensure_positive_vent_ids(cls, value):  # noqa: D401 - simple validator
         if value < 0:
             raise ValueError("Identyfikatory wietrznikow musza byc dodatnie")
         return value
 
     @validator("wind_upwind_deg")
-    def _validate_wind_ranges(_cls, value):  # noqa: D401 - validate ranges
+    def _validate_wind_ranges(cls, value):  # noqa: D401 - validate ranges
         if value is None:
             return value
         cleaned: List[List[float]] = []
@@ -147,15 +147,15 @@ class VentPlanStagePayload(BaseModel):
         extra = "forbid"
 
     @validator("id", "name", pre=True)
-    def _strip_stage_strings(_cls, value):  # noqa: D401 - simple normaliser
+    def _strip_stage_strings(cls, value):  # noqa: D401 - simple normaliser
         return str(value).strip()
 
     @validator("groups", each_item=True)
-    def _strip_stage_groups(_cls, value):  # noqa: D401 - simple normaliser
+    def _strip_stage_groups(cls, value):  # noqa: D401 - simple normaliser
         return str(value).strip()
 
     @validator("close_strategy_flag")
-    def _normalise_close_flag(_cls, value):  # noqa: D401 - 0/1 normaliser
+    def _normalise_close_flag(cls, value):  # noqa: D401 - 0/1 normaliser
         if value is None:
             return value
         if value not in (0, 1):
@@ -172,7 +172,7 @@ class VentPlanPayload(BaseModel):
         extra = "forbid"
 
     @validator("close_strategy_flag")
-    def _normalize_plan_flag(_cls, value):  # noqa: D401 - 0/1 normaliser
+    def _normalize_plan_flag(cls, value):  # noqa: D401 - 0/1 normaliser
         if value is None:
             return value
         if value not in (0, 1):
@@ -192,31 +192,31 @@ class ExternalConnectionPayload(BaseModel):
         extra = "forbid"
 
     @validator("protocol", "path", pre=True)
-    def _strip_path(_cls, value):  # noqa: D401 - simple normaliser
+    def _strip_path(cls, value):  # noqa: D401 - simple normaliser
         if value is None:
             return value
         return str(value).strip()
 
     @validator("path")
-    def _ensure_path_prefix(_cls, value):  # noqa: D401 - ensure slash prefix
+    def _ensure_path_prefix(cls, value):  # noqa: D401 - ensure slash prefix
         if not value.startswith("/"):
             raise ValueError("Sciezka powinna zaczynac sie od '/'")
         return value
 
     @validator("token", pre=True)
-    def _ensure_token_str(_cls, value):  # noqa: D401 - normalise optional token
+    def _ensure_token_str(cls, value):  # noqa: D401 - normalise optional token
         if value is None:
             return value
         return str(value)
 
     @validator("host", pre=True)
-    def _strip_host(_cls, value):  # noqa: D401 - normalise host
+    def _strip_host(cls, value):  # noqa: D401 - normalise host
         if value is None:
             return value
         return str(value).strip()
 
     @validator("host")
-    def _require_host_when_enabled(_cls, value, values):  # noqa: D401 - host presence
+    def _require_host_when_enabled(cls, value, values):  # noqa: D401 - host presence
         enabled = values.get("enabled")
         if enabled and not value:
             raise ValueError("Wlaczenie polaczenia wymaga podania hosta")
@@ -320,7 +320,7 @@ class ManualControlCommand(BaseModel):
     value: float = Field(..., ge=0.0, le=100.0)
 
     @validator("target", always=True)
-    def _validate_target(_cls, value, values):  # noqa: D401 - ensure target when needed
+    def _validate_target(cls, value, values):  # noqa: D401 - ensure target when needed
         scope = values.get("scope")
         if scope in {"group", "vent"} and not value:
             raise ValueError("target is required for group/vent scope")

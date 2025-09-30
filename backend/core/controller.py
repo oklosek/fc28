@@ -16,11 +16,12 @@ from backend.core.config import (
     EXTERNAL_CONNECTION,
     BONEIOS,
 )
-from backend.core.db import SessionLocal, VentState, RuntimeState, Setting
+from backend.core.db import SessionLocal, VentState, RuntimeState, Setting, EventLog
 from backend.core.mqtt_client import sensor_bus, mqtt_publish
 from backend.core.rs485 import RS485Manager
 from backend.core import test_mode
 from backend.core.vents import Vent
+from backend.core.notifications import log_event
 
 class Controller:
     def __init__(self, rs485_manager: RS485Manager):

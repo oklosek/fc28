@@ -1,4 +1,4 @@
-# config/settings.yaml - centralna konfiguracja systemu
+﻿# config/settings.yaml - centralna konfiguracja systemu
 control:
   controller_loop_s: 1
   scheduler_loop_s: 1
@@ -10,6 +10,14 @@ control:
   risk_open_limit_percent: 50
   min_open_hum_percent: 20
   crit_hum_crack_percent: 10
+  co2_thr_ppm: 1200
+  min_open_co2_percent: 25
+  wind_lock_enabled: true
+  day_target_temp_c: 25
+  night_target_temp_c: 20
+  day_start: "06:00"
+  night_start: "20:00"
+  night_max_open_percent: 40
   flush_hour: 12
   calibration_hour: 0
   allow_humidity_override: false
@@ -129,12 +137,24 @@ vent_groups:
   - id: "group_1"
     name: "Dach 1+2"
     vents: [1, 2]
+    wind_upwind_deg:
+      - [300, 60]
+    wind_lock_enabled: true
+    wind_lock_close_percent: 0
   - id: "group_2"
     name: "Bok 1"
     vents: [3]
+    wind_upwind_deg:
+      - [180, 270]
+    wind_lock_enabled: true
+    wind_lock_close_percent: 0
   - id: "group_3"
     name: "Dach 3"
     vents: [4]
+    wind_upwind_deg:
+      - [240, 330]
+    wind_lock_enabled: true
+    wind_lock_close_percent: 0
 
 # Harmonogram otwierania: etapy (parallel/serial) z krokiem i kolejnoscia
 vent_plan:
@@ -153,15 +173,34 @@ vent_plan:
       delay_s: 2
 
 
-security:  require_token: true     # WAN wymaga naglowka x-admin-token
+heating:
+  enabled: false
+  topic: "boneio/1/switch/heating"
+  payload_on: "ON"
+  payload_off: "OFF"
+  day_target_c: 20
+  night_target_c: 16
+  hysteresis_c: 5
+  day_start: "06:00"
+  night_start: "20:00"
+
+network_interfaces:
+  lan:
+    name: "eth0"
+    description: "Interfejs LAN (most do sieci lokalnej)"
+  wan:
+    name: "wlan0"
+    description: "Interfejs WAN / uplink"
 
 
-
-
-
-
-
-
-
+security:
+  require_token: true     # WAN wymaga naglowka x-admin-token
+# Aktualizacje systemu
+updates:
+  enabled: false
+  manifest_url: ""
+  check_interval_hours: 24
+  apply_script: "scripts/update_from_zip.sh"
+  channel: "stable"
 
 

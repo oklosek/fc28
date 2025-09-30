@@ -45,13 +45,3 @@ class RuntimeState(Base):
     __tablename__ = "runtime_state"
     key = Column(String, primary_key=True)   # e.g. 'mode','last_calibration'
     value = Column(String)
-
-# POMOCNICZE
-def set_kv(session, model, key, value):
-    obj = session.get(model, key) if model is RuntimeState else session.query(model).filter_by(key=key).first()
-    if not obj:
-        obj = model(key=key, value=str(value))
-        session.add(obj)
-    else:
-        obj.value = str(value)
-    session.commit()

@@ -22,6 +22,14 @@ const controlForm = $("#controlForm");
 const controlFieldsBox = $("#controlFields");
 const controlStatus = $("#controlStatus");
 const messageEl = $("#message");
+const updateSection = $("#updateSection");
+const updateBadge = $("#updateBadge");
+const updateInfo = $("#updateInfo");
+const updateNotes = $("#updateNotes");
+const updateMeta = $("#updateMeta");
+const updateError = $("#updateError");
+const runUpdateBtn = $("#runUpdateBtn");
+const checkUpdateBtn = $("#checkUpdateBtn");
 
 let mode = "auto";
 let vents = [];
@@ -31,6 +39,8 @@ let formDirty = false;
 let messageTimer = null;
 let adminToken = "";
 let bulkActionInProgress = false;
+let updateStatus = null;
+let updateNotifiedVersion = null;
 
 const SENSOR_META = {
   internal_temp: { label: "Internal temperature", unit: "C", digits: 1 },
@@ -112,6 +122,153 @@ function formatWithUnit(value, unit = "", digits = 1) {
   return formatted === "--" ? formatted : `${formatted} ${unit}`.trim();
 }
 
+function formatTimestamp(value) {
+  if (!value) {
+    return 'niedostępne';
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+  return date.toLocaleString();
+}
+
+function renderUpdateBanner(status) {
+  if (!updateSection) return;
+  if (!status || status.enabled === false) {
+    updateSection.classList.add('hidden');
+    return;
+  }
+  updateSection.classList.remove('hidden');
+  const { current_version, latest_version, available, last_checked, notes, error, channel } = status;
+  if (updateInfo) {
+    updateInfo.textContent = available
+      ? `Dostępna nowa wersja ${latest_version}. Zainstalowana wersja: ${current_version}.`
+      : `Zainstalowana wersja: ${current_version}. System jest aktualny.`;
+  }
+  if (updateNotes) {
+    if (notes) {
+      updateNotes.textContent = notes;
+      updateNotes.classList.remove('hidden');
+    } else {
+      updateNotes.textContent = '';
+      updateNotes.classList.add('hidden');
+    }
+  }
+  if (updateMeta) {
+    const channelText = channel ? `Kanał: ${channel}` : 'Kanał: stable';
+    const checkedText = last_checked ? `Ostatnie sprawdzenie: ${formatTimestamp(last_checked)}` : 'Ostatnie sprawdzenie: brak danych';
+    updateMeta.textContent = `${checkedText} · ${channelText}`;
+  }
+  if (updateError) {
+    if (error) {
+      updateError.textContent = `Błąd: ${error}`;
+      updateError.classList.remove('hidden');
+    } else {
+      updateError.textContent = '';
+      updateError.classList.add('hidden');
+    }
+  }
+  if (updateBadge) {
+    updateBadge.classList.toggle('hidden', !available);
+  }
+  if (runUpdateBtn) {
+    runUpdateBtn.disabled = !available;
+  }
+  if (checkUpdateBtn) {
+    checkUpdateBtn.disabled = false;
+  }
+  updateSection.classList.toggle('update-available', Boolean(available));
+  if (available && latest_version && latest_version !== updateNotifiedVersion) {
+    showMessage(`Nowa wersja ${latest_version} jest dostępna.`, 'info', 6000);
+    updateNotifiedVersion = latest_version;
+  }
+}
+
+async function fetchUpdateStatus() {
+  if (!updateSection) {
+    return;
+  }
+  try {
+    const response = await fetch('/api/update/status');
+    if (!response.ok) {
+      if (response.status === 404 || response.status === 503) {
+        updateSection.classList.add('hidden');
+        return;
+      }
+      throw new Error(`update status error: ${response.status}`);
+    }
+    const data = await response.json();
+    updateStatus = data;
+    renderUpdateBanner(data);
+  } catch (err) {
+    console.error(err);
+    if (updateError) {
+      updateError.textContent = 'Nie udało się pobrać statusu aktualizacji';
+      updateError.classList.remove('hidden');
+    }
+  }
+}
+
+async function requestUpdateCheck() {
+  if (!checkUpdateBtn) return;
+  if (!adminToken) {
+    showMessage('Podaj token administratora, aby sprawdzić aktualizacje', 'warning');
+    return;
+  }
+  checkUpdateBtn.disabled = true;
+  try {
+    const response = await fetch('/api/update/check', {
+      method: 'POST',
+      headers: adminHeaders(),
+      body: JSON.stringify({}),
+    });
+    if (!response.ok) {
+      throw new Error(`update check error: ${response.status}`);
+    }
+    const data = await response.json();
+    updateStatus = data.status;
+    renderUpdateBanner(updateStatus);
+    showMessage('Sprawdzono dostępność aktualizacji', 'info');
+  } catch (err) {
+    console.error(err);
+    showMessage('Nie udało się sprawdzić aktualizacji', 'error');
+  } finally {
+    checkUpdateBtn.disabled = false;
+    fetchUpdateStatus();
+  }
+}
+
+async function requestRunUpdate() {
+  if (!runUpdateBtn) return;
+  if (!adminToken) {
+    showMessage('Podaj token administratora, aby zainstalować aktualizację', 'warning');
+    return;
+  }
+  runUpdateBtn.disabled = true;
+  try {
+    const response = await fetch('/api/update/run', {
+      method: 'POST',
+      headers: adminHeaders(),
+      body: JSON.stringify({}),
+    });
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(detail || `update run error: ${response.status}`);
+    }
+    const data = await response.json();
+    updateStatus = data.status;
+    renderUpdateBanner(updateStatus);
+    showMessage('Aktualizacja została zainstalowana', 'success', 5000);
+  } catch (err) {
+    console.error(err);
+    showMessage('Instalacja aktualizacji nie powiodła się', 'error');
+  } finally {
+    runUpdateBtn.disabled = false;
+    fetchUpdateStatus();
+  }
+}
+
 function renderSensors(sensors) {
   if (!sensorCards) return;
   sensorCards.innerHTML = "";
@@ -187,7 +344,7 @@ function renderVentSliders() {
     const targetValue = normalizePercent(desired, normalizePercent(vent.position, 0));
     const actualValue = normalizePercent(vent.position, 0);
     row.innerHTML = `
-      <span class="vent-name">#${vent.id} ${vent.name}</span>
+      <span class="vent-name">#${vent.id} ${vent.name}${vent.boneio_device ? ` [${vent.boneio_device}]` : ''}</span>
       <input type="range" min="0" max="100" value="${targetValue}" ${disabled ? "disabled" : ""} data-vent="${vent.id}">
       <span class="target-value">cel: ${targetValue}%</span>
       <span class="actual-value">aktualnie: ${actualValue}%</span>
@@ -639,6 +796,14 @@ if (saveTokenBtn) {
   saveTokenBtn.addEventListener("click", saveToken);
 }
 
+if (checkUpdateBtn) {
+  checkUpdateBtn.addEventListener("click", requestUpdateCheck);
+}
+
+if (runUpdateBtn) {
+  runUpdateBtn.addEventListener("click", requestRunUpdate);
+}
+
 if (controlForm) {
   controlForm.addEventListener("submit", submitControlForm);
   controlForm.addEventListener("input", () => {
@@ -661,9 +826,11 @@ if (refreshHistoryBtn) {
 loadToken();
 buildControlForm({});
 updateModeUI();
+fetchUpdateStatus();
 fetchState();
 fetchHistory(parseInt(historyLimitInput.value, 10) || 100);
 setInterval(fetchState, 3000);
+setInterval(fetchUpdateStatus, 15 * 60 * 1000);
 setInterval(() => {
   const limit = Math.min(
     Math.max(parseInt(historyLimitInput.value, 10) || 100, 10),

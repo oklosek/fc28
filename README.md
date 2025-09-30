@@ -85,7 +85,7 @@ FarmCare to kontroler klimatu dla szklarni i tuneli wyposazonych w czujniki srod
    - `ADMIN_TOKEN` - token wymagany do uwierzytelniania panelu administracyjnego (ustaw wlasny, losowy ciag).
    - `MQTT_HOST` / `MQTT_PORT` - adres brokera MQTT, z ktorym laczy sie backend.
    - `MQTT_USERNAME` / `MQTT_PASSWORD` - dane logowania do brokera (pozostaw puste dla polaczen anonimowych).
-   - (Opcjonalnie) inne zmienne zdefiniowane w `backend/core/config.py`, np. `API_HOST`, `API_PORT`, jesli potrzebujesz nadpisac.
+   - (Opcjonalnie) inne pola zdefiniowane w `backend/core/config.py`, np. `cors_allow_origins` lub `settings_yaml`, jezeli chcesz zmienic domeny CORS albo sciezke do pliku konfiguracyjnego.
 
 ### 5. Konfiguracja pliku `config/settings.yaml`
 Plik `config/settings.yaml` definiuje logike sterowania. Dostosuj go do instalacji:
@@ -131,15 +131,14 @@ Po zmianach zachowaj plik i przygotuj kopie zapasowa dla zespolu serwisowego.
    mqtt_broker: 192.168.50.1
    ```
    Dostosuj te wartosci do topologii sieci.
-2. Dostosuj `boneio/boneio1.yaml`:
-   - Zmien `topic_prefix`, numery pinow GPIO i liste wietrznikow, jesli uklad jest inny.
-   - Zadbaj, aby tematy MQTT pokrywaly sie z wpisami w `config/settings.yaml`.
-   - Uzupelnij dodatkowe moduly BoneIO kopiujac plik i aktualizujac identyfikatory.
-3. Wgraj konfiguracje na ESP32 (w wymaganym srodowisku):
+2. W `config/settings.yaml` przygotuj sekcje `boneio_devices`, podajac unikalne `id`, `base_topic` oraz - opcjonalnie - `availability_topic` dla kazdego sterownika. Te identyfikatory beda dostepne w panelu instalatora.
+3. Dostosuj pliki ESPHome (`boneio/boneio1.yaml`, kolejne kopiuj wedlug potrzeb): zmien `topic_prefix`, pinout, nazwy wietrznikow i upewnij sie, ze tematy MQTT odpowiadaja wpisom w `config/settings.yaml`.
+4. Wgraj konfiguracje na ESP32 (w wymaganym srodowisku):
    ```bash
    esphome run boneio/boneio1.yaml
    ```
    Po starcie modul publikuje status `farmcare/vents/<id>/available`, co pozwala backendowi wykryc gotowosc.
+5. W panelu instalatora (zakladka *Urzadzenia BoneIO*) dodaj wszystkie sterowniki, zsynchronizuj ich dane z `settings.yaml`, a nastepnie w zakladce *Wietrzniki* przypisz poszczegolne napedy do odpowiednich urzadzen.
 
 ### 7. Inicjalizacja bazy danych
 1. Upewnij sie, ze wirtualne srodowisko jest aktywne.
@@ -349,7 +348,7 @@ Panel uzytkownika bedzie dostepny pod `http://127.0.0.1:8000/static/index.html`.
 ## Testy
 Przed uruchomieniem zainstaluj zaleznosc testowa (`pip install pytest`) i uruchom testy jednostkowe:
 ```bash
-pytest -q
+python -m pytest -q
 ```
 
 ## Struktura katalogow
@@ -370,5 +369,11 @@ pytest -q
 - `sqlite3 data/farmcare.sqlite3 '.tables'` - wglad do tabel bazy danych
 - `esphome logs boneio/boneio1.yaml` - monitorowanie logow z modulu BoneIO w trybie serwisowym
 
+### 10. Automatyczne aktualizacje
+1. W pliku `config/settings.yaml` ustaw sekcję `updates` (przykład znajduje się w repozytorium). Co najmniej `enabled: true` i `manifest_url` wskazujące na plik JSON z informacjami o wydaniu.
+2. Domyślnie sprawdzanie odbywa się co 24 godziny (`check_interval_hours`). Można zmienić wartość, jeśli backend ma pobierać manifest częściej.
+3. Po wykryciu nowej wersji dashboard wyświetla baner z informacją, a administrator może wymusić aktualizację przyciskiem w panelu (`Zainstaluj aktualizację`).
+4. Żądania `POST /api/update/check` oraz `POST /api/update/run` wymagają nagłówka `x-admin-token`; przed użyciem zapisz token w prawym górnym rogu dashboardu.
+5. Jeżeli podasz `apply_script`, zostanie on uruchomiony z ustawioną zmienną środowiskową `FARMCARE_UPDATE_PACKAGE` (ścieżka do pobranego pakietu). W środowiskach produkcyjnych umieść tam własny skrypt aktualizacji.
 
 

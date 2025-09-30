@@ -24,6 +24,21 @@
 
   <section id="message" class="hidden"></section>
 
+  <section id="updateSection" class="hidden">
+    <div class="update-header">
+      <h2>Aktualizacja systemu</h2>
+      <span id="updateBadge" class="update-available-badge hidden">Nowa wersja</span>
+    </div>
+    <p id="updateInfo">Aktualny stan aktualizacji nie jest jeszcze dostępny.</p>
+    <p id="updateNotes" class="muted hidden"></p>
+    <p id="updateMeta" class="update-meta"></p>
+    <p id="updateError" class="update-error hidden"></p>
+    <div class="update-actions">
+      <button id="checkUpdateBtn" type="button" class="secondary">Sprawdź teraz</button>
+      <button id="runUpdateBtn" type="button" class="primary">Zainstaluj aktualizację</button>
+    </div>
+  </section>
+
   <section id="sensors">
     <h2>Current readings</h2>
     <div class="cards" id="sensorCards"></div>

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # backend/app.py – punkt wejścia FastAPI/uvicorn
 import os
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from backend.core.config import settings, ensure_dirs
@@ -10,6 +10,7 @@ from backend.core.mqtt_client import mqtt_start
 from backend.core.controller import Controller
 from backend.core.rs485 import RS485Manager
 from backend.core.scheduler import Scheduler
+from backend.core.update_manager import UpdateManager
 from backend.routers import api, installer, ws
 
 app = FastAPI(title="FarmCare 2.0", version="2.0.0")
@@ -39,6 +40,7 @@ app.include_router(ws.router, tags=["ws"])
 controller: Controller = None
 rs485: RS485Manager = None
 scheduler: Scheduler = None
+update_manager: UpdateManager = None
 
 @app.on_event("startup")
 async def on_startup():
@@ -61,11 +63,16 @@ async def on_startup():
     global scheduler
     scheduler = Scheduler(controller)
     scheduler.start()
+    global update_manager
+    update_manager = UpdateManager(current_version=app.version)
+    update_manager.start()
+
 
 @app.on_event("shutdown")
 async def on_shutdown():
     if scheduler: scheduler.stop()
     if controller: controller.stop()
+    if update_manager: update_manager.stop()
     if rs485: await rs485.stop()
 
 # Strona główna i panel instalatora

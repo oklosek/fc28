@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # backend/routers/api.py - REST API for dashboard
 from typing import Dict, List
 
@@ -8,6 +8,7 @@ from backend.core.config import CONTROL
 from backend.core.db import SessionLocal, SensorLog, Setting
 from backend.core.mqtt_client import sensor_bus
 from backend.core.schemas import (
+    HeatingConfigDTO,
     SensorHistoryDTO,
     StateDTO,
     VentDTO,
@@ -39,18 +40,50 @@ def get_state():
             position=v.position,
             available=v.available,
             user_target=v.user_target,
+            boneio_device=getattr(v, "boneio_device", None),
         )
         for v in controller.vents.values()
     ]
     sensors: Dict[str, float | None] = sensor_bus.averages()
     groups = controller.export_groups() if controller else []
+    heating_cfg = controller.export_heating() if controller else None
     return StateDTO(
         mode=controller.mode,
         vents=vent_models,
         sensors=sensors,
         config=dict(CONTROL),
         groups=[VentGroupDTO(**g) for g in groups],
+        heating=HeatingConfigDTO(**heating_cfg) if heating_cfg else None,
     )
+
+
+@router.get("/update/status")
+def get_update_status():
+    manager = _update_manager()
+    if manager is None:
+        raise HTTPException(status_code=503, detail="Updater disabled")
+    return manager.status()
+
+
+@router.post("/update/check")
+def manual_update_check(_: None = Depends(require_admin)):
+    manager = _update_manager()
+    if manager is None:
+        raise HTTPException(status_code=503, detail="Updater disabled")
+    status = manager.check_for_updates(manual=True)
+    return {"ok": True, "status": status}
+
+
+@router.post("/update/run")
+def manual_update_run(_: None = Depends(require_admin)):
+    manager = _update_manager()
+    if manager is None:
+        raise HTTPException(status_code=503, detail="Updater disabled")
+    result = manager.run_update()
+    if not result.get("ok"):
+        detail = result.get("detail", "Update failed")
+        raise HTTPException(status_code=400, detail=detail)
+    return result
 
 
 @router.get("/history", response_model=List[SensorHistoryDTO])
@@ -119,12 +152,14 @@ def set_one(vent_id: int, p=Body(...)):
 
 
 @router.post("/admin/update")
-def update_binary(auth=Depends(require_admin)):
-    # W realu: przyjmij upload (multipart) i uruchom scripts/update_from_zip.sh
-    return {
-        "ok": True,
-        "msg": "Endpoint placeholder - przygotowany do uploadu i restartu.",
-    }
+def update_binary(_: None = Depends(require_admin)):
+    manager = _update_manager()
+    if manager is None:
+        return {"ok": False, "msg": "Updater disabled"}
+    result = manager.run_update()
+    if not result.get("ok"):
+        return {"ok": False, "msg": result.get("detail", "Update failed")}
+    return {"ok": True, "msg": "Update applied", "status": result.get("status")}
 
 
 

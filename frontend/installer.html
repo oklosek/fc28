@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="pl">
 <head>
   <meta charset="utf-8" />
@@ -7,67 +7,320 @@
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
-  <h1>Panel instalatora</h1>
-  <section class="auth">
+  <header class="page-header">
+    <div class="header-title">
+      <h1>Panel instalatora</h1>
+    </div>
+    <nav class="panel-switcher">
+      <button type="button" class="panel-tab active" data-panel="settingsPanel">Panel konfiguracyjny</button>
+      <button type="button" class="panel-tab" data-panel="diagnosticsPanel">Panel diagnostyczny</button>
+    </nav>
+  </header>
+
+  <section class="card auth">
     <div class="form-row">
       <label>Admin token
         <input id="tokenInput" type="password" autocomplete="off" placeholder="wpisz token" />
       </label>
-      <button id="loadConfig">Wczytaj konfigurację</button>
+      <button id="loadConfig">Wczytaj konfiguracje</button>
       <span id="status"></span>
     </div>
   </section>
 
-  <section id="controlSection" class="hidden requires-config">
-    <h2>Parametry sterowania</h2>
-    <div id="controlFields" class="form-grid"></div>
-    <button id="saveControl">Zapisz parametry</button>
-  </section>
+  <main>
+    <section id="settingsPanel" class="panel active">
+      <section id="sensorSection" class="card requires-config">
+        <div class="card-header">
+          <h2>Status czujnikow i sieci</h2>
+          <button id="refreshSensors" class="secondary">Odswiez</button>
+        </div>
+        <div class="sensor-overview">
+          <div>
+            <h3>Czujniki</h3>
+            <div id="sensorMetrics" class="grid grid-sm"></div>
+          </div>
+          <div>
+            <h3>Magistrale RS485</h3>
+            <div id="rs485Status" class="list"></div>
+          </div>
+          <div>
+            <h3>Interfejsy sieciowe</h3>
+            <div id="networkStatus" class="list"></div>
+          </div>
+        </div>
+      </section>
 
-  <section id="groupsSection" class="hidden requires-config">
-    <h2>Grupy wietrzników</h2>
-    <div id="groupList"></div>
-    <button id="addGroup">Dodaj grupę</button>
-  </section>
+      <section id="controlSection" class="card requires-config">
+        <div class="card-header">
+          <h2>Parametry sterownika</h2>
+          <button id="saveControl" class="primary">Zapisz parametry</button>
+        </div>
+        <div class="control-wrapper">
+          <div class="control-column">
+            <h3>Widoczne w dashboardzie</h3>
+            <div id="controlDashboard" class="form-grid"></div>
+          </div>
+          <div class="control-column">
+            <h3>Zaawansowane</h3>
+            <details open>
+              <summary>Rozwin ustawienia zaawansowane</summary>
+              <div id="controlAdvanced" class="form-grid"></div>
+            </details>
+          </div>
+        </div>
+      </section>
 
-  <section id="planSection" class="hidden requires-config">
-    <h2>Plan etapów otwierania</h2>
-    <div class="form-row">
-      <label>Strategia zamykania (0 = FIFO, 1 = LIFO)
-        <select id="planCloseStrategy">
-          <option value="0">0 – FIFO</option>
-          <option value="1">1 – LIFO</option>
-        </select>
-      </label>
-    </div>
-    <div id="stageList"></div>
-    <button id="addStage">Dodaj etap</button>
-    <button id="saveGroups">Zapisz grupy i plan</button>
-  </section>
+      <section id="heatingSection" class="card requires-config">
+        <div class="card-header">
+          <h2>Konfiguracja ogrzewania</h2>
+          <button id="saveHeating" class="primary">Zapisz ogrzewanie</button>
+        </div>
+        <div class="form-grid" id="heatingFields">
+          <div class="form-row checkbox">
+            <label>
+              <input id="heatingEnabled" type="checkbox" />
+              Ogrzewanie aktywne
+            </label>
+          </div>
+          <div class="form-row">
+            <label>Topic MQTT
+              <input id="heatingTopic" type="text" placeholder="np. boneio/1/switch/heating" />
+            </label>
+            <label>Payload ON
+              <input id="heatingPayloadOn" type="text" placeholder="ON" />
+            </label>
+            <label>Payload OFF
+              <input id="heatingPayloadOff" type="text" placeholder="OFF" />
+            </label>
+          </div>
+          <div class="form-row">
+            <label>Temperatura dzienna [&deg;C]
+              <input id="heatingDayTarget" type="number" step="0.1" />
+            </label>
+            <label>Temperatura nocna [&deg;C]
+              <input id="heatingNightTarget" type="number" step="0.1" />
+            </label>
+            <label>Histereza [&deg;C]
+              <input id="heatingHysteresis" type="number" step="0.1" />
+            </label>
+          </div>
+          <div class="form-row">
+            <label>Poczatek dnia
+              <input id="heatingDayStart" type="time" />
+            </label>
+            <label>Poczatek nocy
+              <input id="heatingNightStart" type="time" />
+            </label>
+          </div>
+        </div>
+      </section>
 
-  <section id="manualSection" class="hidden requires-config">
-    <h2>Sterowanie grupą</h2>
-    <div class="form-row">
-      <label>Grupa
-        <select id="manualGroupSelect"></select>
-      </label>
-      <label>Pozycja [%]
-        <input id="manualGroupValue" type="number" min="0" max="100" value="0" />
-      </label>
-      <button id="manualGroupSend">Ustaw</button>
-    </div>
-  </section>
+      <section id="boneioSection" class="card requires-config">
+        <div class="card-header">
+          <h2>Urzadzenia BoneIO</h2>
+          <div class="card-actions">
+            <button id="addBoneio" class="secondary">Dodaj BoneIO</button>
+            <button id="saveBoneio" class="primary">Zapisz BoneIO</button>
+          </div>
+        </div>
+        <div id="boneioList" class="list"></div>
+      </section>
 
-  <section id="actionsSection" class="hidden requires-config">
-    <h2>Akcje serwisowe</h2>
-    <button id="calibrateAll">Kalibracja wszystkich</button>
-  </section>
 
-  <section id="rawSection" class="hidden requires-config">
-    <h2>Podgląd JSON</h2>
-    <pre id="rawConfig"></pre>
-  </section>
+      <section id="ventsSection" class="card requires-config">
+        <div class="card-header">
+          <h2>Konfiguracja wietrznikow</h2>
+          <div class="card-actions">
+            <button id="addVent" class="secondary">Dodaj wietrznik</button>
+            <button id="saveVents" class="primary">Zapisz wietrzniki</button>
+          </div>
+        </div>
+        <div id="ventList" class="list"></div>
+      </section>
 
+      <section id="groupsSection" class="card requires-config">
+        <div class="card-header">
+          <h2>Grupy wietrznikow</h2>
+          <div class="card-actions">
+            <button id="addGroup" class="secondary">Dodaj grupe</button>
+          </div>
+        </div>
+        <div id="groupList" class="list"></div>
+        <div class="card-footer">
+          <button id="saveGroups" class="primary">Zapisz grupy</button>
+        </div>
+      </section>
+
+      <section id="planSection" class="card requires-config">
+        <div class="card-header">
+          <h2>Plan otwierania</h2>
+          <div class="card-actions">
+            <button id="addStage" class="secondary">Dodaj etap</button>
+          </div>
+        </div>
+        <div class="form-row">
+          <label>Strategia zamykania
+            <select id="planCloseStrategy">
+              <option value="fifo">FIFO</option>
+              <option value="lifo">LIFO</option>
+            </select>
+          </label>
+        </div>
+        <div id="stageList" class="list"></div>
+        <div class="card-footer">
+          <button id="savePlan" class="primary">Zapisz plan</button>
+        </div>
+      </section>
+
+      <section id="externalSection" class="card requires-config">
+        <div class="card-header">
+          <h2>Polaczenie z serwerem zewnetrznym</h2>
+          <button id="saveExternal" class="primary">Zapisz konfiguracje</button>
+        </div>
+        <div class="form-grid" id="externalFields">
+          <div class="form-row checkbox">
+            <label>
+              <input id="externalEnabled" type="checkbox" />
+              Polaczenie aktywne
+            </label>
+          </div>
+          <div class="form-row">
+            <label>Protokul
+              <select id="externalProtocol">
+                <option value="https">https</option>
+                <option value="http">http</option>
+              </select>
+            </label>
+            <label>Host
+              <input id="externalHost" type="text" placeholder="adres serwera" />
+            </label>
+            <label>Port
+              <input id="externalPort" type="number" min="1" max="65535" />
+            </label>
+          </div>
+          <div class="form-row">
+            <label>sciezka
+              <input id="externalPath" type="text" placeholder="/api" />
+            </label>
+            <label>Token API
+              <input id="externalToken" type="text" placeholder="token dostepowy" />
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <section id="serviceSection" class="card requires-config">
+        <div class="card-header">
+          <h2>Akcje serwisowe</h2>
+        </div>
+        <div class="form-row">
+          <button id="calibrateAll" class="primary">Kalibracja wszystkich wietrznikow</button>
+        </div>
+      </section>
+
+      <section id="rawSection" class="card requires-config">
+        <div class="card-header">
+          <h2>Podglad JSON</h2>
+          <button id="refreshRaw" class="secondary">Odswiez</button>
+        </div>
+        <pre id="rawConfig" class="code-block"></pre>
+      </section>
+    </section>
+
+    <section id="diagnosticsPanel" class="panel">
+      <section id="testStatusSection" class="card requires-config">
+        <div class="card-header">
+          <h2>Status testowy</h2>
+          <div class="card-actions">
+            <label class="switch">
+              <input id="testModeToggle" type="checkbox" />
+              <span>Tryb testowy</span>
+            </label>
+            <button id="refreshTestStatus" class="secondary">Odswiez</button>
+          </div>
+        </div>
+        <div class="test-status">
+          <div>
+            <h3>BoneIO</h3>
+            <div id="testBoneio" class="list"></div>
+          </div>
+          <div>
+            <h3>Wietrzniki</h3>
+            <div id="testVents" class="list"></div>
+          </div>
+          <div>
+            <h3>Symulacje</h3>
+            <div id="testOverrides" class="list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="manualControlSection" class="card requires-config">
+        <div class="card-header">
+          <h2>Sterowanie reczne</h2>
+        </div>
+        <div class="form-row">
+          <label>Zakres
+            <select id="manualScope">
+              <option value="all">Wszystkie wietrzniki</option>
+              <option value="group">Wybrana grupa</option>
+              <option value="vent">Pojedynczy wietrznik</option>
+            </select>
+          </label>
+          <label id="manualTargetLabel" class="hidden">Cel
+            <input id="manualTarget" type="text" placeholder="id grupy lub wietrznika" />
+          </label>
+          <label>Pozycja [%]
+            <input id="manualValue" type="number" min="0" max="100" step="1" value="0" />
+          </label>
+          <button id="manualSend" class="primary">Wyslij polecenie</button>
+        </div>
+      </section>
+
+      <section id="simulationSection" class="card requires-config">
+        <div class="card-header">
+          <h2>Symulacja czujnikow</h2>
+          <div class="card-actions">
+            <button id="resetSim" class="secondary">Resetuj symulacje</button>
+          </div>
+        </div>
+        <div id="simulationList" class="list"></div>
+        <div class="form-row">
+          <button id="applySim" class="primary">Zastosuj wartosci</button>
+        </div>
+      </section>
+
+      <section id="logsSection" class="card requires-config">
+        <div class="card-header">
+          <h2>Logi systemowe</h2>
+          <div class="card-actions">
+            <button data-log-kind="system" class="log-btn secondary">System</button>
+            <button data-log-kind="mqtt" class="log-btn secondary">MQTT</button>
+          </div>
+        </div>
+        <pre id="logsOutput" class="code-block"></pre>
+      </section>
+
+      <section id="pingSection" class="card requires-config">
+        <div class="card-header">
+          <h2>Test polaczen</h2>
+        </div>
+        <div class="form-row">
+          <button data-ping="api" class="ping-btn secondary">API</button>
+          <button data-ping="internet" class="ping-btn secondary">Internet</button>
+          <button data-ping="external" class="ping-btn secondary">Serwer zewnetrzny</button>
+        </div>
+        <div id="pingResults" class="list"></div>
+      </section>
+    </section>
+  </main>
+
+  <div id="loadingOverlay" class="loading-overlay hidden">
+    <div class="spinner" aria-hidden="true"></div>
+    <p id="loadingMessage">Przetwarzanie...</p>
+  </div>
   <script src="/static/installer.js"></script>
 </body>
 </html>
+
+

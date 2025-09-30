@@ -197,3 +197,16 @@ class RS485Manager:
 
     def averages(self) -> Dict[str, float | None]:
         return self.snapshot.averages()
+
+    def status(self) -> List[dict]:
+        info = []
+        for bus in self.buses:
+            info.append({
+                'name': bus.name,
+                'port': bus.port,
+                'available': bus.available,
+                'errors': bus.errors,
+                'next_retry': bus.next_retry,
+            })
+        return info
+

@@ -83,11 +83,33 @@ class Controller:
             for v in self.vents.values():
                 vs = s.get(VentState, v.id)
                 if vs:
-                    v.position = float(vs.position)
-                    v.available = bool(vs.available)
-                    v.user_target = float(vs.user_target)
+                    position = vs.position
+                    try:
+                        v.position = float(position) if position is not None else 0.0
+                    except (TypeError, ValueError):
+                        v.position = 0.0
+
+                    available = vs.available
+                    if available is None:
+                        v.available = True
+                    else:
+                        v.available = bool(available)
+
+                    user_target = vs.user_target
+                    try:
+                        v.user_target = float(user_target) if user_target is not None else 0.0
+                    except (TypeError, ValueError):
+                        v.user_target = 0.0
                 else:
-                    s.add(VentState(id=v.id, name=v.name, position=0.0, available=True, user_target=0.0))
+                    s.add(
+                        VentState(
+                            id=v.id,
+                            name=v.name,
+                            position=0.0,
+                            available=True,
+                            user_target=0.0,
+                        )
+                    )
             s.commit()
 
     def _normalize_close_strategy(self, value: Optional[str], default: str = "fifo") -> str:

@@ -272,6 +272,7 @@ ethernet:
     subnet: 255.255.255.0
     dns1: 192.168.50.1
 
+# MQTT broker connection
 mqtt:
   id: mqtt_client
   broker: 192.168.50.1
@@ -502,8 +503,8 @@ script:
           condition:
             lambda: 'return state;'
           then:
-            - delay: !lambda |-
-                return (uint32_t) travel_time_ms;
+            # Delay calculated via a proper !lambda expression for YAML parsing
+            - delay: !lambda 'return (uint32_t) travel_time_ms;'
             - switch.turn_off: up_switch
             - switch.turn_off: down_switch
             - lambda: |-
@@ -564,6 +565,7 @@ script:
           }
       - component.update: status_display
 
+# Relay outputs controlling vent motors
 switch:
   - platform: gpio
     pin: GPIO32

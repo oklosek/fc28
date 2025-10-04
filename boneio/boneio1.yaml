@@ -503,9 +503,8 @@ script:
           condition:
             lambda: 'return state;'
           then:
-            # Delay calculated via a proper !lambda block for YAML parsing
-            - delay: !lambda |-
-                return static_cast<uint32_t>(travel_time_ms);
+            # Delay calculated via a proper !lambda expression for YAML parsing
+            - delay: !lambda 'return (uint32_t) travel_time_ms;'
             - switch.turn_off: up_switch
             - switch.turn_off: down_switch
             - lambda: |-

@@ -824,7 +824,7 @@ async function submitControlForm(event) {
   try {
     const response = await fetch("/api/control", {
       method: "POST",
-      headers: adminHeaders(),
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
     if (!response.ok) {
@@ -1302,9 +1302,4 @@ setInterval(() => {
   );
   fetchHistory(limit);
 }, 30000);
-
-
-
-
-
 

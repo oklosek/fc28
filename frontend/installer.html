@@ -14,6 +14,7 @@
     <nav class="panel-switcher">
       <button type="button" class="panel-tab active" data-panel="settingsPanel">Panel konfiguracyjny</button>
       <button type="button" class="panel-tab" data-panel="diagnosticsPanel">Panel diagnostyczny</button>
+      <button type="button" class="panel-tab" data-panel="testsPanel">Panel testow</button>
     </nav>
   </header>
 
@@ -228,6 +229,31 @@
     </section>
 
     <section id="diagnosticsPanel" class="panel">
+      <section id="logsSection" class="card requires-config">
+        <div class="card-header">
+          <h2>Logi systemowe</h2>
+          <div class="card-actions">
+            <button data-log-kind="system" class="log-btn secondary">System</button>
+            <button data-log-kind="mqtt" class="log-btn secondary">MQTT</button>
+          </div>
+        </div>
+        <pre id="logsOutput" class="code-block"></pre>
+      </section>
+
+      <section id="pingSection" class="card requires-config">
+        <div class="card-header">
+          <h2>Test polaczen</h2>
+        </div>
+        <div class="form-row">
+          <button data-ping="api" class="ping-btn secondary">API</button>
+          <button data-ping="internet" class="ping-btn secondary">Internet</button>
+          <button data-ping="external" class="ping-btn secondary">Serwer zewnetrzny</button>
+        </div>
+        <div id="pingResults" class="list"></div>
+      </section>
+    </section>
+
+    <section id="testsPanel" class="panel">
       <section id="testStatusSection" class="card requires-config">
         <div class="card-header">
           <h2>Status testowy</h2>
@@ -289,29 +315,6 @@
           <button id="applySim" class="primary">Zastosuj wartosci</button>
         </div>
       </section>
-
-      <section id="logsSection" class="card requires-config">
-        <div class="card-header">
-          <h2>Logi systemowe</h2>
-          <div class="card-actions">
-            <button data-log-kind="system" class="log-btn secondary">System</button>
-            <button data-log-kind="mqtt" class="log-btn secondary">MQTT</button>
-          </div>
-        </div>
-        <pre id="logsOutput" class="code-block"></pre>
-      </section>
-
-      <section id="pingSection" class="card requires-config">
-        <div class="card-header">
-          <h2>Test polaczen</h2>
-        </div>
-        <div class="form-row">
-          <button data-ping="api" class="ping-btn secondary">API</button>
-          <button data-ping="internet" class="ping-btn secondary">Internet</button>
-          <button data-ping="external" class="ping-btn secondary">Serwer zewnetrzny</button>
-        </div>
-        <div id="pingResults" class="list"></div>
-      </section>
     </section>
   </main>
 
@@ -322,5 +325,4 @@
   <script src="/static/installer.js"></script>
 </body>
 </html>
-
 

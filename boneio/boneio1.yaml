@@ -1,3 +1,11 @@
+﻿substitutions:
+  vent_count: "4"
+  vent1_travel_ms: "30000"
+  vent2_travel_ms: "28000"
+  vent3_travel_ms: "35000"
+  vent4_travel_ms: "32000"
+  display_update_interval: "1s"
+
 esphome:
   name: boneio1
   friendly_name: BoneIO 1
@@ -28,6 +36,22 @@ esphome:
           topic: farmcare/vents/4/available
           payload: "online"
           retain: true
+      - mqtt.publish:
+          topic: farmcare/vents/1/position
+          payload: "0"
+          retain: true
+      - mqtt.publish:
+          topic: farmcare/vents/2/position
+          payload: "0"
+          retain: true
+      - mqtt.publish:
+          topic: farmcare/vents/3/position
+          payload: "0"
+          retain: true
+      - mqtt.publish:
+          topic: farmcare/vents/4/position
+          payload: "0"
+          retain: true
   on_shutdown:
     then:
       - mqtt.publish:
@@ -52,135 +76,62 @@ esp32:
 
 logger:
 
-ethernet:
-  type: LAN8720
-  mdc_pin: GPIO23
-  mdio_pin: GPIO18
-  power_pin: GPIO5
-  phy_addr: 0
-  clk:
-    mode: CLK_EXT_IN
-    pin: GPIO0
-  manual_ip:
-    static_ip: !secret ethernet_ip
-    gateway: !secret ethernet_gateway
-    subnet: !secret ethernet_subnet
-    dns1: !secret ethernet_dns
+# I2C bus powering the OLED status display. Adjust SDA/SCL if your hardware uses different lines.
+i2c:
+  sda: GPIO21
+  scl: GPIO22
+  scan: false
+  frequency: 400kHz
 
-mqtt:
-  broker: !secret mqtt_broker
-  topic_prefix: boneio/1
-  keepalive: 30s
-  reboot_timeout: 0s
-  on_message:
-    - topic: boneio/1/cover/vent1/+
-      then:
-        - script.execute:
-            id: handle_cover_command
-            up_switch: vent1_up
-            down_switch: vent1_down
-            direction: !lambda 'return topic.substr(topic.find_last_of("/") + 1);'
-            state: !lambda 'return payload == "ON";'
-    - topic: boneio/1/cover/vent2/+
-      then:
-        - script.execute:
-            id: handle_cover_command
-            up_switch: vent2_up
-            down_switch: vent2_down
-            direction: !lambda 'return topic.substr(topic.find_last_of("/") + 1);'
-            state: !lambda 'return payload == "ON";'
-    - topic: boneio/1/cover/vent3/+
-      then:
-        - script.execute:
-            id: handle_cover_command
-            up_switch: vent3_up
-            down_switch: vent3_down
-            direction: !lambda 'return topic.substr(topic.find_last_of("/") + 1);'
-            state: !lambda 'return payload == "ON";'
-    - topic: boneio/1/cover/vent4/+
-      then:
-        - script.execute:
-            id: handle_cover_command
-            up_switch: vent4_up
-            down_switch: vent4_down
-            direction: !lambda 'return topic.substr(topic.find_last_of("/") + 1);'
-            state: !lambda 'return payload == "ON";'
+globals:
+  - id: display_index
+    type: int
+    initial_value: "0"
+  - id: vent1_percent
+    type: float
+    initial_value: "0.0"
+  - id: vent2_percent
+    type: float
+    initial_value: "0.0"
+  - id: vent3_percent
+    type: float
+    initial_value: "0.0"
+  - id: vent4_percent
+    type: float
+    initial_value: "0.0"
+  - id: vent1_state
+    type: int
+    initial_value: "0"
+  - id: vent2_state
+    type: int
+    initial_value: "0"
+  - id: vent3_state
+    type: int
+    initial_value: "0"
+  - id: vent4_state
+    type: int
+    initial_value: "0"
 
-script:
-  - id: handle_cover_command
-    parameters:
-      up_switch: switch
-      down_switch: switch
-      direction: string
-      state: bool
-    then:
-      - lambda: |-
-          if (direction == "up") {
-            if (state) {
-              up_switch->turn_on();
-            } else {
-              up_switch->turn_off();
-            }
-          } else {
-            if (state) {
-              down_switch->turn_on();
-            } else {
-              down_switch->turn_off();
-            }
-          }
-
-switch:
-  - platform: gpio
-    pin: GPIO32
-    id: vent1_up
-    name: "vent1_up"
-    interlock: [vent1_down]
-    restore_mode: ALWAYS_OFF
-  - platform: gpio
-    pin: GPIO33
-    id: vent1_down
-    name: "vent1_down"
-    interlock: [vent1_up]
-    restore_mode: ALWAYS_OFF
-  - platform: gpio
-    pin: GPIO13
-    id: vent2_up
-    name: "vent2_up"
-    interlock: [vent2_down]
-    restore_mode: ALWAYS_OFF
-  - platform: gpio
-    pin: GPIO14
-    id: vent2_down
-    name: "vent2_down"
-    interlock: [vent2_up]
-    restore_mode: ALWAYS_OFF
-  - platform: gpio
-    pin: GPIO15
-    id: vent3_up
-    name: "vent3_up"
-    interlock: [vent3_down]
-    restore_mode: ALWAYS_OFF
-  - platform: gpio
-    pin: GPIO4
-    id: vent3_down
-    name: "vent3_down"
-    interlock: [vent3_up]
-    restore_mode: ALWAYS_OFF
-  - platform: gpio
-    pin: GPIO16
-    id: vent4_up
-    name: "vent4_up"
-    interlock: [vent4_down]
-    restore_mode: ALWAYS_OFF
-  - platform: gpio
-    pin: GPIO17
-    id: vent4_down
-    name: "vent4_down"
-    interlock: [vent4_up]
-    restore_mode: ALWAYS_OFF
-
+text_sensor:
+  - platform: ethernet_info
+    ip_address:
+      id: eth_ip
+      name: "BoneIO 1 IP"
+    mac_address:
+      name: "BoneIO 1 MAC"
 
 binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO0
+      mode:
+        input: true
+        pullup: true
+    id: display_button
+    internal: true
+    on_press:
+      then:
+        - script.execute: next_page
   - platform: gpio
     pin: GPIO34
     name: "vent1_error"
@@ -245,3 +196,420 @@ binary_sensor:
           topic: boneio/1/in/vent4_error
           payload: "0"
           retain: true
+
+display:
+  - platform: ssd1306_i2c
+    id: status_display
+    model: "SSD1306 128x64"
+    address: 0x3C
+    update_interval: ${display_update_interval}
+    lambda: |-
+      it.clear();
+      if (id(display_index) == 0) {
+        it.printf(0, 0, "FARMCARE");
+        if (id(eth_ip).has_state()) {
+          it.printf(0, 16, "IP: %s", id(eth_ip).state.c_str());
+        } else {
+          it.printf(0, 16, "IP: --");
+        }
+        it.printf(0, 32, "Vents: %d", ${vent_count});
+      } else {
+        const int idx = id(display_index);
+        float pct = 0.0f;
+        int raw_state = 0;
+        switch (idx) {
+          case 1:
+            pct = id(vent1_percent);
+            raw_state = id(vent1_state);
+            break;
+          case 2:
+            pct = id(vent2_percent);
+            raw_state = id(vent2_state);
+            break;
+          case 3:
+            pct = id(vent3_percent);
+            raw_state = id(vent3_state);
+            break;
+          case 4:
+            pct = id(vent4_percent);
+            raw_state = id(vent4_state);
+            break;
+          default:
+            pct = 0.0f;
+            raw_state = 0;
+            break;
+        }
+        const char* status = "IDLE";
+        if (raw_state > 0) {
+          status = "OPENING";
+        } else if (raw_state < 0) {
+          status = "CLOSING";
+        } else if (pct >= 99.0f) {
+          status = "OPEN";
+        } else if (pct <= 1.0f) {
+          status = "CLOSED";
+        }
+        it.printf(0, 0, "Vent %d", idx);
+        it.printf(0, 16, "Target %.0f%%", pct);
+        it.printf(0, 32, "%s", status);
+      }
+
+interval:
+  - interval: 10s
+    then:
+      - component.update: status_display
+
+ethernet:
+  type: LAN8720
+  mdc_pin: GPIO23
+  mdio_pin: GPIO18
+  power_pin: GPIO5
+  phy_addr: 0
+  clock_mode: GPIO0_IN
+  manual_ip:
+    static_ip: !secret ethernet_ip
+    gateway: !secret ethernet_gateway
+    subnet: !secret ethernet_subnet
+    dns1: !secret ethernet_dns
+
+mqtt:
+  id: mqtt_client
+  broker: !secret mqtt_broker
+  topic_prefix: boneio/1
+  keepalive: 30s
+  reboot_timeout: 0s
+  on_message:
+    - topic: boneio/1/cover/vent1/up
+      payload: "ON"
+      then:
+        - script.execute:
+            id: handle_cover_command
+            up_switch: vent1_up
+            down_switch: vent1_down
+            direction: "up"
+            state: true
+            travel_time_ms: ${vent1_travel_ms}
+            vent_index: 1
+    - topic: boneio/1/cover/vent1/up
+      payload: "OFF"
+      then:
+        - script.execute:
+            id: handle_cover_command
+            up_switch: vent1_up
+            down_switch: vent1_down
+            direction: "up"
+            state: false
+            travel_time_ms: ${vent1_travel_ms}
+            vent_index: 1
+    - topic: boneio/1/cover/vent1/down
+      payload: "ON"
+      then:
+        - script.execute:
+            id: handle_cover_command
+            up_switch: vent1_up
+            down_switch: vent1_down
+            direction: "down"
+            state: true
+            travel_time_ms: ${vent1_travel_ms}
+            vent_index: 1
+    - topic: boneio/1/cover/vent1/down
+      payload: "OFF"
+      then:
+        - script.execute:
+            id: handle_cover_command
+            up_switch: vent1_up
+            down_switch: vent1_down
+            direction: "down"
+            state: false
+            travel_time_ms: ${vent1_travel_ms}
+            vent_index: 1
+    - topic: boneio/1/cover/vent2/up
+      payload: "ON"
+      then:
+        - script.execute:
+            id: handle_cover_command
+            up_switch: vent2_up
+            down_switch: vent2_down
+            direction: "up"
+            state: true
+            travel_time_ms: ${vent2_travel_ms}
+            vent_index: 2
+    - topic: boneio/1/cover/vent2/up
+      payload: "OFF"
+      then:
+        - script.execute:
+            id: handle_cover_command
+            up_switch: vent2_up
+            down_switch: vent2_down
+            direction: "up"
+            state: false
+            travel_time_ms: ${vent2_travel_ms}
+            vent_index: 2
+    - topic: boneio/1/cover/vent2/down
+      payload: "ON"
+      then:
+        - script.execute:
+            id: handle_cover_command
+            up_switch: vent2_up
+            down_switch: vent2_down
+            direction: "down"
+            state: true
+            travel_time_ms: ${vent2_travel_ms}
+            vent_index: 2
+    - topic: boneio/1/cover/vent2/down
+      payload: "OFF"
+      then:
+        - script.execute:
+            id: handle_cover_command
+            up_switch: vent2_up
+            down_switch: vent2_down
+            direction: "down"
+            state: false
+            travel_time_ms: ${vent2_travel_ms}
+            vent_index: 2
+    - topic: boneio/1/cover/vent3/up
+      payload: "ON"
+      then:
+        - script.execute:
+            id: handle_cover_command
+            up_switch: vent3_up
+            down_switch: vent3_down
+            direction: "up"
+            state: true
+            travel_time_ms: ${vent3_travel_ms}
+            vent_index: 3
+    - topic: boneio/1/cover/vent3/up
+      payload: "OFF"
+      then:
+        - script.execute:
+            id: handle_cover_command
+            up_switch: vent3_up
+            down_switch: vent3_down
+            direction: "up"
+            state: false
+            travel_time_ms: ${vent3_travel_ms}
+            vent_index: 3
+    - topic: boneio/1/cover/vent3/down
+      payload: "ON"
+      then:
+        - script.execute:
+            id: handle_cover_command
+            up_switch: vent3_up
+            down_switch: vent3_down
+            direction: "down"
+            state: true
+            travel_time_ms: ${vent3_travel_ms}
+            vent_index: 3
+    - topic: boneio/1/cover/vent3/down
+      payload: "OFF"
+      then:
+        - script.execute:
+            id: handle_cover_command
+            up_switch: vent3_up
+            down_switch: vent3_down
+            direction: "down"
+            state: false
+            travel_time_ms: ${vent3_travel_ms}
+            vent_index: 3
+    - topic: boneio/1/cover/vent4/up
+      payload: "ON"
+      then:
+        - script.execute:
+            id: handle_cover_command
+            up_switch: vent4_up
+            down_switch: vent4_down
+            direction: "up"
+            state: true
+            travel_time_ms: ${vent4_travel_ms}
+            vent_index: 4
+    - topic: boneio/1/cover/vent4/up
+      payload: "OFF"
+      then:
+        - script.execute:
+            id: handle_cover_command
+            up_switch: vent4_up
+            down_switch: vent4_down
+            direction: "up"
+            state: false
+            travel_time_ms: ${vent4_travel_ms}
+            vent_index: 4
+    - topic: boneio/1/cover/vent4/down
+      payload: "ON"
+      then:
+        - script.execute:
+            id: handle_cover_command
+            up_switch: vent4_up
+            down_switch: vent4_down
+            direction: "down"
+            state: true
+            travel_time_ms: ${vent4_travel_ms}
+            vent_index: 4
+    - topic: boneio/1/cover/vent4/down
+      payload: "OFF"
+      then:
+        - script.execute:
+            id: handle_cover_command
+            up_switch: vent4_up
+            down_switch: vent4_down
+            direction: "down"
+            state: false
+            travel_time_ms: ${vent4_travel_ms}
+            vent_index: 4
+
+script:
+  - id: handle_cover_command
+    mode: restart
+    parameters:
+      up_switch: switch
+      down_switch: switch
+      direction: string
+      state: bool
+      travel_time_ms: int
+      vent_index: int
+    then:
+      - lambda: |-
+          int state_value = 0;
+          if (state) {
+            if (direction == "up") {
+              up_switch->turn_on();
+              down_switch->turn_off();
+              state_value = 1;
+            } else {
+              down_switch->turn_on();
+              up_switch->turn_off();
+              state_value = -1;
+            }
+          } else {
+            up_switch->turn_off();
+            down_switch->turn_off();
+          }
+          switch (vent_index) {
+            case 1:
+              id(vent1_state) = state_value;
+              break;
+            case 2:
+              id(vent2_state) = state_value;
+              break;
+            case 3:
+              id(vent3_state) = state_value;
+              break;
+            case 4:
+              id(vent4_state) = state_value;
+              break;
+          }
+          id(status_display).update();
+      - if:
+          condition:
+            lambda: 'return state;'
+          then:
+            - delay: !lambda |-
+                return (uint32_t) travel_time_ms;
+            - switch.turn_off: up_switch
+            - switch.turn_off: down_switch
+            - lambda: |-
+                float target = (direction == "up") ? 100.0f : 0.0f;
+                switch (vent_index) {
+                  case 1:
+                    id(vent1_percent) = target;
+                    id(vent1_state) = 0;
+                    break;
+                  case 2:
+                    id(vent2_percent) = target;
+                    id(vent2_state) = 0;
+                    break;
+                  case 3:
+                    id(vent3_percent) = target;
+                    id(vent3_state) = 0;
+                    break;
+                  case 4:
+                    id(vent4_percent) = target;
+                    id(vent4_state) = 0;
+                    break;
+                }
+                char topic[40];
+                snprintf(topic, sizeof(topic), "farmcare/vents/%d/position", vent_index);
+                char payload[8];
+                snprintf(payload, sizeof(payload), "%.0f", target);
+                id(mqtt_client).publish(topic, payload, 0, true);
+                id(status_display).update();
+      - if:
+          condition:
+            lambda: 'return !state;'
+          then:
+            - switch.turn_off: up_switch
+            - switch.turn_off: down_switch
+            - lambda: |-
+                switch (vent_index) {
+                  case 1:
+                    id(vent1_state) = 0;
+                    break;
+                  case 2:
+                    id(vent2_state) = 0;
+                    break;
+                  case 3:
+                    id(vent3_state) = 0;
+                    break;
+                  case 4:
+                    id(vent4_state) = 0;
+                    break;
+                }
+                id(status_display).update();
+  - id: next_page
+    mode: restart
+    then:
+      - lambda: |-
+          id(display_index)++;
+          if (id(display_index) > ${vent_count}) {
+            id(display_index) = 0;
+          }
+      - component.update: status_display
+
+switch:
+  - platform: gpio
+    pin: GPIO32
+    id: vent1_up
+    name: "vent1_up"
+    interlock: [vent1_down]
+    restore_mode: ALWAYS_OFF
+  - platform: gpio
+    pin: GPIO33
+    id: vent1_down
+    name: "vent1_down"
+    interlock: [vent1_up]
+    restore_mode: ALWAYS_OFF
+  - platform: gpio
+    pin: GPIO13
+    id: vent2_up
+    name: "vent2_up"
+    interlock: [vent2_down]
+    restore_mode: ALWAYS_OFF
+  - platform: gpio
+    pin: GPIO14
+    id: vent2_down
+    name: "vent2_down"
+    interlock: [vent2_up]
+    restore_mode: ALWAYS_OFF
+  - platform: gpio
+    pin: GPIO15
+    id: vent3_up
+    name: "vent3_up"
+    interlock: [vent3_down]
+    restore_mode: ALWAYS_OFF
+  - platform: gpio
+    pin: GPIO4
+    id: vent3_down
+    name: "vent3_down"
+    interlock: [vent3_up]
+    restore_mode: ALWAYS_OFF
+  - platform: gpio
+    pin: GPIO16
+    id: vent4_up
+    name: "vent4_up"
+    interlock: [vent4_down]
+    restore_mode: ALWAYS_OFF
+  - platform: gpio
+    pin: GPIO17
+    id: vent4_down
+    name: "vent4_down"
+    interlock: [vent4_up]
+    restore_mode: ALWAYS_OFF

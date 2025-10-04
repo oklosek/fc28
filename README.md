@@ -82,7 +82,7 @@ FarmCare to kontroler klimatu dla szklarni i tuneli wyposazonych w czujniki srod
    nano config/.env
    ```
    Kluczowe pola:
-   - `ADMIN_TOKEN` - token wymagany do uwierzytelniania panelu administracyjnego (ustaw wlasny, losowy ciag).
+   - `ADMIN_TOKEN` - token wymagany do uwierzytelniania panelu instalatora (Konfiguracja/Diagnostyka/Panel testow) i operacji serwisowych; zmiana parametrow z dashboardu nie wymaga tokenu.
    - `MQTT_HOST` / `MQTT_PORT` - adres brokera MQTT, z ktorym laczy sie backend.
    - `MQTT_USERNAME` / `MQTT_PASSWORD` - dane logowania do brokera (pozostaw puste dla polaczen anonimowych).
    - (Opcjonalnie) inne pola zdefiniowane w `backend/core/config.py`, np. `cors_allow_origins` lub `settings_yaml`, jezeli chcesz zmienic domeny CORS albo sciezke do pliku konfiguracyjnego.
@@ -116,6 +116,11 @@ Plik `config/settings.yaml` definiuje logike sterowania. Dostosuj go do instalac
             wind_speed_max: "wind_gust"
   ```
   Driver `sensecap_sco2_03b` przelicza temperature i wilgotnosc dzielac wartosci rejestrowe przez 100, a `sensecap_s500_v2` dzieli odczyty przez 1000 (temperatura w degC, predkosci w m/s, cisnienie w Pa).
+#### Diagnostyka czujnikow zewnetrznych
+- Backend laczy odczyty z RS485 i MQTT; wartosci `external_temp`, `external_hum`, `external_pressure`, `wind_speed` oraz `wind_gust` powinny byc widoczne w panelu instalatora.
+- Po podaniu tokenu i wczytaniu konfiguracji przejdz do zakladki *Panel testow*. Sekcja *Status testowy* prezentuje aktualne wartosci z czujnikow SenseCAP (driver `sensecap_s500_v2`), a przycisk **Odswiez** wymusza natychmiastowy odczyt.
+- W tej samej zakladce sekcja *Symulacje* pozwala chwilowo nadpisac wartosci czujnikow do testow logiki regulatora; po probie wybierz **Resetuj symulacje**, aby wrocic do danych z magistrali.
+- Jesli wartosci pozostaja puste, sprawdz zakladke *Diagnostyka* -> *Test polaczen* oraz logi `journalctl -u farmcare.service -f` (bledy `RS485 sensor read error` wskazuja na problem z magistrala lub adresem slava).
 
 Po zmianach zachowaj plik i przygotuj kopie zapasowa dla zespolu serwisowego.
 
@@ -139,6 +144,7 @@ Po zmianach zachowaj plik i przygotuj kopie zapasowa dla zespolu serwisowego.
    ```
    Po starcie modul publikuje status `farmcare/vents/<id>/available`, co pozwala backendowi wykryc gotowosc.
 5. W panelu instalatora (zakladka *Urzadzenia BoneIO*) dodaj wszystkie sterowniki, zsynchronizuj ich dane z `settings.yaml`, a nastepnie w zakladce *Wietrzniki* przypisz poszczegolne napedy do odpowiednich urzadzen.
+6. Po zapisaniu konfiguracji przejdz do zakladki *Panel testow*, aby potwierdzic odczyty z RS485 oraz wykonac reczne sterowanie testowe.
 
 ### 7. Inicjalizacja bazy danych
 1. Upewnij sie, ze wirtualne srodowisko jest aktywne.
@@ -373,7 +379,16 @@ python -m pytest -q
 1. W pliku `config/settings.yaml` ustaw sekcję `updates` (przykład znajduje się w repozytorium). Co najmniej `enabled: true` i `manifest_url` wskazujące na plik JSON z informacjami o wydaniu.
 2. Domyślnie sprawdzanie odbywa się co 24 godziny (`check_interval_hours`). Można zmienić wartość, jeśli backend ma pobierać manifest częściej.
 3. Po wykryciu nowej wersji dashboard wyświetla baner z informacją, a administrator może wymusić aktualizację przyciskiem w panelu (`Zainstaluj aktualizację`).
-4. Żądania `POST /api/update/check` oraz `POST /api/update/run` wymagają nagłówka `x-admin-token`; przed użyciem zapisz token w prawym górnym rogu dashboardu.
+4. Jesli w `config/settings.yaml` parametr `security.require_token` pozostaje ustawiony na `true`, zadania `POST /api/update/check` oraz `POST /api/update/run` wymagaja naglowka `x-admin-token`; token wpisujesz raz w gornym pasku dashboardu (przechowywany lokalnie w przegladarce).
 5. Jeżeli podasz `apply_script`, zostanie on uruchomiony z ustawioną zmienną środowiskową `FARMCARE_UPDATE_PACKAGE` (ścieżka do pobranego pakietu). W środowiskach produkcyjnych umieść tam własny skrypt aktualizacji.
+
+
+
+
+
+
+
+
+
 
 

@@ -267,14 +267,14 @@ ethernet:
   phy_addr: 0
   clock_mode: GPIO0_IN
   manual_ip:
-    static_ip: !secret ethernet_ip
-    gateway: !secret ethernet_gateway
-    subnet: !secret ethernet_subnet
-    dns1: !secret ethernet_dns
+    static_ip: 192.168.1.51
+    gateway: 192.168.50.1
+    subnet: 255.255.255.0
+    dns1: 192.168.50.1
 
 mqtt:
   id: mqtt_client
-  broker: !secret mqtt_broker
+  broker: 192.168.50.1
   topic_prefix: boneio/1
   keepalive: 30s
   reboot_timeout: 0s

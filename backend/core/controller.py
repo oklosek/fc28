@@ -78,7 +78,15 @@ class Controller:
         with SessionLocal() as s:
             # runtime mode
             kv = s.get(RuntimeState, "mode")
-            if kv: self.mode = kv.value
+            if kv:
+                stored_mode = str(kv.value).strip().lower()
+                if stored_mode == "auto":
+                    self.mode = "auto"
+                else:
+                    # Tryb ręczny nie powinien być stanem startowym – po restarcie
+                    # zawsze wracamy do trybu automatycznego i aktualizujemy wpis.
+                    self.mode = "auto"
+                    kv.value = "auto"
             # vent states
             for v in self.vents.values():
                 vs = s.get(VentState, v.id)

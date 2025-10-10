@@ -289,7 +289,6 @@ mqtt:
             down_switch: vent1_down
             direction: "up"
             state: true
-            travel_time_ms: ${vent1_travel_ms}
             vent_index: 1
     - topic: boneio/1/cover/vent1/up
       payload: "OFF"
@@ -300,7 +299,6 @@ mqtt:
             down_switch: vent1_down
             direction: "up"
             state: false
-            travel_time_ms: ${vent1_travel_ms}
             vent_index: 1
     - topic: boneio/1/cover/vent1/down
       payload: "ON"
@@ -311,7 +309,6 @@ mqtt:
             down_switch: vent1_down
             direction: "down"
             state: true
-            travel_time_ms: ${vent1_travel_ms}
             vent_index: 1
     - topic: boneio/1/cover/vent1/down
       payload: "OFF"
@@ -322,7 +319,6 @@ mqtt:
             down_switch: vent1_down
             direction: "down"
             state: false
-            travel_time_ms: ${vent1_travel_ms}
             vent_index: 1
     - topic: boneio/1/cover/vent2/up
       payload: "ON"
@@ -333,7 +329,6 @@ mqtt:
             down_switch: vent2_down
             direction: "up"
             state: true
-            travel_time_ms: ${vent2_travel_ms}
             vent_index: 2
     - topic: boneio/1/cover/vent2/up
       payload: "OFF"
@@ -344,7 +339,6 @@ mqtt:
             down_switch: vent2_down
             direction: "up"
             state: false
-            travel_time_ms: ${vent2_travel_ms}
             vent_index: 2
     - topic: boneio/1/cover/vent2/down
       payload: "ON"
@@ -355,7 +349,6 @@ mqtt:
             down_switch: vent2_down
             direction: "down"
             state: true
-            travel_time_ms: ${vent2_travel_ms}
             vent_index: 2
     - topic: boneio/1/cover/vent2/down
       payload: "OFF"
@@ -366,7 +359,6 @@ mqtt:
             down_switch: vent2_down
             direction: "down"
             state: false
-            travel_time_ms: ${vent2_travel_ms}
             vent_index: 2
     - topic: boneio/1/cover/vent3/up
       payload: "ON"
@@ -377,7 +369,6 @@ mqtt:
             down_switch: vent3_down
             direction: "up"
             state: true
-            travel_time_ms: ${vent3_travel_ms}
             vent_index: 3
     - topic: boneio/1/cover/vent3/up
       payload: "OFF"
@@ -388,7 +379,6 @@ mqtt:
             down_switch: vent3_down
             direction: "up"
             state: false
-            travel_time_ms: ${vent3_travel_ms}
             vent_index: 3
     - topic: boneio/1/cover/vent3/down
       payload: "ON"
@@ -399,7 +389,6 @@ mqtt:
             down_switch: vent3_down
             direction: "down"
             state: true
-            travel_time_ms: ${vent3_travel_ms}
             vent_index: 3
     - topic: boneio/1/cover/vent3/down
       payload: "OFF"
@@ -410,7 +399,6 @@ mqtt:
             down_switch: vent3_down
             direction: "down"
             state: false
-            travel_time_ms: ${vent3_travel_ms}
             vent_index: 3
     - topic: boneio/1/cover/vent4/up
       payload: "ON"
@@ -421,7 +409,6 @@ mqtt:
             down_switch: vent4_down
             direction: "up"
             state: true
-            travel_time_ms: ${vent4_travel_ms}
             vent_index: 4
     - topic: boneio/1/cover/vent4/up
       payload: "OFF"
@@ -432,7 +419,6 @@ mqtt:
             down_switch: vent4_down
             direction: "up"
             state: false
-            travel_time_ms: ${vent4_travel_ms}
             vent_index: 4
     - topic: boneio/1/cover/vent4/down
       payload: "ON"
@@ -443,7 +429,6 @@ mqtt:
             down_switch: vent4_down
             direction: "down"
             state: true
-            travel_time_ms: ${vent4_travel_ms}
             vent_index: 4
     - topic: boneio/1/cover/vent4/down
       payload: "OFF"
@@ -454,7 +439,6 @@ mqtt:
             down_switch: vent4_down
             direction: "down"
             state: false
-            travel_time_ms: ${vent4_travel_ms}
             vent_index: 4
 
 script:
@@ -465,7 +449,6 @@ script:
       down_switch: switch
       direction: string
       state: bool
-      travel_time_ms: int
       vent_index: int
     then:
       - lambda: |-
@@ -503,8 +486,24 @@ script:
           condition:
             lambda: 'return state;'
           then:
-            # Delay calculated via a proper !lambda expression for YAML parsing
-            - delay: !lambda 'return (uint32_t) travel_time_ms;'
+            # Delay matched to vent index without custom YAML tags
+            - choose:
+                - conditions:
+                    lambda: 'return vent_index == 1;'
+                  sequence:
+                    - delay: ${vent1_travel_ms}ms
+                - conditions:
+                    lambda: 'return vent_index == 2;'
+                  sequence:
+                    - delay: ${vent2_travel_ms}ms
+                - conditions:
+                    lambda: 'return vent_index == 3;'
+                  sequence:
+                    - delay: ${vent3_travel_ms}ms
+                - conditions:
+                    lambda: 'return vent_index == 4;'
+                  sequence:
+                    - delay: ${vent4_travel_ms}ms
             - switch.turn_off: up_switch
             - switch.turn_off: down_switch
             - lambda: |-

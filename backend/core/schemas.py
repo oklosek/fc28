@@ -29,6 +29,19 @@ class SensorHistoryDTO(BaseModel):
     value: float
 
 
+class HeatingValveDTO(BaseModel):
+    open_topic: Optional[str] = None
+    close_topic: Optional[str] = None
+    stop_topic: Optional[str] = None
+    open_payload: Optional[str] = None
+    close_payload: Optional[str] = None
+    stop_payload: Optional[str] = None
+    travel_time_s: Optional[float] = None
+    reverse_pause_s: Optional[float] = None
+    min_move_s: Optional[float] = None
+    ignore_delta_percent: Optional[float] = None
+
+
 class HeatingConfigDTO(BaseModel):
     enabled: bool
     topic: Optional[str] = None
@@ -39,6 +52,8 @@ class HeatingConfigDTO(BaseModel):
     hysteresis_c: Optional[float] = None
     day_start: Optional[str] = None
     night_start: Optional[str] = None
+    mode: str = "binary"
+    valve: Optional[HeatingValveDTO] = None
 
 class StateDTO(BaseModel):
     mode: str

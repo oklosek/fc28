@@ -22,6 +22,7 @@ from backend.core.rs485 import RS485Manager
 from backend.core import test_mode
 from backend.core.vents import Vent
 from backend.core.notifications import log_event
+from backend.core.heating_valve import ThreeWayValve
 
 class Controller:
     def __init__(self, rs485_manager: RS485Manager):
@@ -38,7 +39,10 @@ class Controller:
         self._vent_to_groups: Dict[int, List[str]] = {}
         self._last_env: dict = {}
         self._last_env_snapshot: dict = {"sensors": {}, "sources": {}}
-        self._heating_state: Optional[bool] = None
+        self._heating_state: Optional[float | bool] = None
+        self._heating_mode: str = self._current_heating_mode()
+        self._heating_valve: Optional[ThreeWayValve] = None
+        self._heating_valve_tolerance: float = 1.0
         self._co2_alert_active: bool = False
         self._heating_day_start: Optional[dt_time] = None
         self._heating_night_start: Optional[dt_time] = None
@@ -48,6 +52,7 @@ class Controller:
         self._close_strategy = self._normalize_close_strategy(VENT_PLAN_CLOSE_STRATEGY)
         self._apply_control_overrides()
         self._apply_heating_overrides()
+        self._init_heating_valve()
         self._tolerance = float(CONTROL.get("ignore_delta_percent", 0.5)) or 0.5
         self._configure_plan(VENT_GROUPS, VENT_PLAN_STAGES, self._close_strategy)
         self._apply_plan_overrides()
@@ -258,7 +263,10 @@ class Controller:
             "hysteresis_c": _float_or_none(HEATING.get("hysteresis_c")),
             "day_start": HEATING.get("day_start"),
             "night_start": HEATING.get("night_start"),
+            "mode": self._current_heating_mode(),
         }
+        valve_cfg = HEATING.get("valve") if isinstance(HEATING.get("valve"), dict) else None
+        data["valve"] = dict(valve_cfg) if isinstance(valve_cfg, dict) else None
         return data
 
     def _configure_plan(
@@ -444,6 +452,48 @@ class Controller:
                     sanitized[key] = None
                 else:
                     sanitized[key] = str(value).strip() or None
+        if "mode" in payload:
+            mode_value = payload.get("mode")
+            if mode_value is None:
+                sanitized["mode"] = "binary"
+            else:
+                text = str(mode_value).strip().lower()
+                sanitized["mode"] = text if text in {"binary", "three_way_valve"} else "binary"
+        if "valve" in payload:
+            valve_raw = payload.get("valve")
+            if valve_raw is None:
+                sanitized["valve"] = None
+            elif isinstance(valve_raw, dict):
+                valve_cfg: Dict[str, object] = {}
+                for key in ("open_topic", "close_topic", "stop_topic"):
+                    if key not in valve_raw:
+                        continue
+                    value = valve_raw.get(key)
+                    if value is None:
+                        valve_cfg[key] = None
+                    else:
+                        text = str(value).strip()
+                        valve_cfg[key] = text or None
+                for key in ("open_payload", "close_payload", "stop_payload"):
+                    if key not in valve_raw:
+                        continue
+                    value = valve_raw.get(key)
+                    if value is None:
+                        valve_cfg[key] = None
+                    else:
+                        valve_cfg[key] = str(value).strip() or None
+                for key in ("travel_time_s", "reverse_pause_s", "min_move_s"):
+                    if key not in valve_raw:
+                        continue
+                    value = valve_raw.get(key)
+                    if value is None:
+                        valve_cfg[key] = None
+                        continue
+                    try:
+                        valve_cfg[key] = float(value)
+                    except (TypeError, ValueError):
+                        continue
+                sanitized["valve"] = valve_cfg
         return sanitized
 
     def _is_daytime(self, now: datetime, day_start: Optional[dt_time], night_start: Optional[dt_time]) -> bool:
@@ -481,6 +531,82 @@ class Controller:
 
     def _is_heating_enabled(self) -> bool:
         return isinstance(HEATING, dict) and bool(HEATING.get("enabled"))
+
+    def _current_heating_mode(self) -> str:
+        if not isinstance(HEATING, dict):
+            return "binary"
+        mode = HEATING.get("mode")
+        if isinstance(mode, str):
+            normalized = mode.strip().lower()
+            if normalized == "three_way_valve":
+                return "three_way_valve"
+        return "binary"
+
+    def _get_heating_valve_config(self) -> Optional[dict]:
+        if not isinstance(HEATING, dict):
+            return None
+        valve_cfg = HEATING.get("valve")
+        if not isinstance(valve_cfg, dict):
+            return None
+        open_topic = str(valve_cfg.get("open_topic") or "").strip()
+        close_topic = str(valve_cfg.get("close_topic") or "").strip()
+        if not open_topic or not close_topic:
+            return None
+        cfg = dict(valve_cfg)
+        cfg["open_topic"] = open_topic
+        cfg["close_topic"] = close_topic
+        stop_topic = cfg.get("stop_topic")
+        if stop_topic is not None:
+            stop_topic = str(stop_topic).strip()
+            cfg["stop_topic"] = stop_topic or None
+        for key in ("open_payload", "close_payload", "stop_payload"):
+            if key in cfg:
+                value = cfg.get(key)
+                cfg[key] = (str(value).strip() or None) if value is not None else None
+        def _float_opt(key: str, default: Optional[float] = None) -> Optional[float]:
+            value = cfg.get(key, default)
+            if value is None:
+                return default
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return default
+        cfg["travel_time_s"] = _float_opt("travel_time_s", 30.0)
+        cfg["reverse_pause_s"] = max(0.0, _float_opt("reverse_pause_s", 1.0) or 0.0)
+        cfg["min_move_s"] = max(0.0, _float_opt("min_move_s", 0.5) or 0.0)
+        cfg["ignore_delta_percent"] = max(0.0, _float_opt("ignore_delta_percent", 1.0) or 0.0)
+        return cfg
+
+    def _init_heating_valve(self) -> None:
+        self._heating_valve = None
+        self._heating_valve_tolerance = 1.0
+        if self._current_heating_mode() != "three_way_valve":
+            return
+        valve_cfg = self._get_heating_valve_config()
+        if not valve_cfg:
+            return
+        tolerance = valve_cfg.get("ignore_delta_percent", 1.0) or 1.0
+        try:
+            self._heating_valve_tolerance = max(0.0, float(tolerance))
+        except (TypeError, ValueError):
+            self._heating_valve_tolerance = 1.0
+        try:
+            self._heating_valve = ThreeWayValve(
+                open_topic=valve_cfg["open_topic"],
+                close_topic=valve_cfg["close_topic"],
+                stop_topic=valve_cfg.get("stop_topic"),
+                open_payload=valve_cfg.get("open_payload") or "ON",
+                close_payload=valve_cfg.get("close_payload") or "ON",
+                stop_payload=valve_cfg.get("stop_payload") or "OFF",
+                travel_time_s=valve_cfg.get("travel_time_s") or 30.0,
+                reverse_pause_s=valve_cfg.get("reverse_pause_s") or 1.0,
+                min_move_s=valve_cfg.get("min_move_s") or 0.5,
+                ignore_delta_percent=self._heating_valve_tolerance,
+            )
+            if isinstance(self._heating_state, (int, float)) and self._heating_valve:
+                self._heating_valve.position = float(self._heating_state)
+        except Exception:
+            self._heating_valve = None
 
     def _update_co2_alert(self, co2_value: Optional[float], threshold: Optional[float]) -> None:
         active = bool(threshold is not None and co2_value is not None and co2_value > threshold)
@@ -540,19 +666,35 @@ class Controller:
         if not isinstance(HEATING, dict):
             self._heating_state = None
             return
+        mode = self._current_heating_mode()
+        if mode != self._heating_mode:
+            self._heating_state = None
+            self._heating_mode = mode
+            self._init_heating_valve()
         if not self._is_heating_enabled():
-            if self._heating_state:
-                topic = HEATING.get("topic")
-                if topic:
-                    self._set_heating(False, topic)
-                else:
-                    self._heating_state = None
+            if mode == "three_way_valve":
+                valve_cfg = self._get_heating_valve_config()
+                if valve_cfg and (self._heating_state is None or float(self._heating_state) > self._heating_valve_tolerance):
+                    self._set_heating(0.0, valve_cfg=valve_cfg)
+                self._heating_state = 0.0
             else:
-                self._heating_state = None
+                if self._heating_state:
+                    topic = str(HEATING.get("topic") or "").strip()
+                    if topic:
+                        self._set_heating(False, topic=topic)
+                self._heating_state = False
             return
-        topic = HEATING.get("topic")
-        if not topic:
-            return
+        valve_cfg = None
+        topic = None
+        if mode == "three_way_valve":
+            valve_cfg = self._get_heating_valve_config()
+            if not valve_cfg or not self._heating_valve:
+                return
+        else:
+            raw_topic = HEATING.get("topic")
+            topic = str(raw_topic).strip() if raw_topic is not None else ""
+            if not topic:
+                return
         try:
             internal_temp = float(sensors.get("internal_temp"))
         except (TypeError, ValueError):
@@ -567,23 +709,100 @@ class Controller:
             hysteresis = 5.0
         if hysteresis < 0.0:
             hysteresis = 0.0
-        on_threshold = target - hysteresis
-        current_state = self._heating_state
-        desired_state = current_state
-        if current_state is None:
-            desired_state = internal_temp <= on_threshold
-        elif current_state:
-            if internal_temp >= target:
-                desired_state = False
+        if mode == "three_way_valve":
+            desired_percent = self._compute_heating_valve_target(internal_temp, target, hysteresis)
+            current_percent = float(self._heating_state) if isinstance(self._heating_state, (int, float)) else None
+            tolerance = self._heating_valve_tolerance or 0.0
+            if current_percent is None or abs(desired_percent - current_percent) >= tolerance:
+                self._set_heating(desired_percent, valve_cfg=valve_cfg)
         else:
-            if internal_temp <= on_threshold:
-                desired_state = True
-        if desired_state is None:
-            desired_state = False
-        if desired_state != current_state:
-            self._set_heating(desired_state, topic)
+            on_threshold = target - hysteresis
+            current_state = bool(self._heating_state) if isinstance(self._heating_state, bool) else None
+            desired_state: Optional[bool] = current_state
+            if current_state is None:
+                desired_state = internal_temp <= on_threshold
+            elif current_state:
+                if internal_temp >= target:
+                    desired_state = False
+            else:
+                if internal_temp <= on_threshold:
+                    desired_state = True
+            if desired_state is None:
+                desired_state = False
+            if desired_state != current_state:
+                self._set_heating(desired_state, topic=topic)
 
-    def _set_heating(self, state: bool, topic: str) -> None:
+    def _compute_heating_valve_target(self, internal_temp: float, target: float, hysteresis: float) -> float:
+        if hysteresis <= 0.0:
+            return 100.0 if internal_temp < target else 0.0
+        on_threshold = target - hysteresis
+        if internal_temp <= on_threshold:
+            return 100.0
+        if internal_temp >= target:
+            return 0.0
+        span = target - on_threshold
+        if span <= 0:
+            return 100.0 if internal_temp < target else 0.0
+        ratio = (target - internal_temp) / span
+        return max(0.0, min(100.0, ratio * 100.0))
+
+    def _set_heating(
+        self,
+        state: float | bool,
+        *,
+        topic: Optional[str] = None,
+        valve_cfg: Optional[dict] = None,
+    ) -> None:
+        mode = self._heating_mode
+        meta: Dict[str, object] = {"mode": mode}
+        event_name = "HEATING_STATE"
+        if mode == "three_way_valve":
+            if not valve_cfg or not self._heating_valve or not self._async_loop:
+                return
+            try:
+                desired = max(0.0, min(100.0, float(state)))
+            except (TypeError, ValueError):
+                return
+            current = float(self._heating_state) if isinstance(self._heating_state, (int, float)) else None
+            tolerance = self._heating_valve_tolerance or 0.0
+            if current is not None and abs(desired - current) < tolerance:
+                return
+            try:
+                position = self._async_loop.run_until_complete(self._heating_valve.move_to(desired))
+            except Exception as exc:
+                print("Heating valve move error:", exc)
+                return
+            self._heating_state = float(position)
+            meta.update({
+                "target_percent": desired,
+                "position": position,
+                "open_topic": valve_cfg.get("open_topic"),
+                "close_topic": valve_cfg.get("close_topic"),
+                "stop_topic": valve_cfg.get("stop_topic"),
+            })
+            event_name = "HEATING_VALVE_TARGET"
+        else:
+            bool_state = bool(state)
+            if not topic:
+                return
+            success, extra = self._publish_heating_binary(bool_state, topic)
+            if not success:
+                return
+            self._heating_state = bool_state
+            meta.update(extra)
+            event_name = "HEATING_ON" if bool_state else "HEATING_OFF"
+        try:
+            with SessionLocal() as session:
+                session.add(EventLog(
+                    level="INFO",
+                    event=event_name,
+                    meta=meta,
+                ))
+                session.commit()
+        except Exception:
+            pass
+
+    def _publish_heating_binary(self, state: bool, topic: str) -> tuple[bool, Dict[str, object]]:
         payload_key = "payload_on" if state else "payload_off"
         payload = HEATING.get(payload_key) or ("ON" if state else "OFF")
         success = True
@@ -593,18 +812,8 @@ class Controller:
             except Exception as exc:
                 print("Heating publish error:", exc)
                 success = False
-        if success:
-            self._heating_state = state
-            try:
-                with SessionLocal() as session:
-                    session.add(EventLog(
-                        level="INFO",
-                        event="HEATING_ON" if state else "HEATING_OFF",
-                        meta={"topic": topic, "payload": payload},
-                    ))
-                    session.commit()
-            except Exception:
-                pass
+        meta = {"topic": topic, "payload": payload}
+        return success, meta
 
     def _coerce_control_value(self, key: str, raw: object):
         baseline = CONTROL.get(key)
@@ -1211,6 +1420,9 @@ class Controller:
             if sanitized:
                 HEATING.update(sanitized)
                 self._persist_heating_overrides(sanitized)
+                self._heating_mode = self._current_heating_mode()
+                self._heating_state = None
+                self._init_heating_valve()
                 schedule_dirty = True
         if external:
             EXTERNAL_CONNECTION.update(external)

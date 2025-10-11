@@ -109,6 +109,27 @@ if isinstance(HEATING, dict):
     HEATING.setdefault("hysteresis_c", 5.0)
     HEATING.setdefault("day_start", "06:00")
     HEATING.setdefault("night_start", "20:00")
+    mode = str(HEATING.get("mode") or "binary").strip().lower()
+    if mode not in ("binary", "three_way_valve"):
+        mode = "binary"
+    HEATING["mode"] = mode
+    if mode == "three_way_valve":
+        valve_cfg = HEATING.get("valve")
+        if not isinstance(valve_cfg, dict):
+            valve_cfg = {}
+        valve_cfg.setdefault("open_topic", None)
+        valve_cfg.setdefault("close_topic", None)
+        valve_cfg.setdefault("stop_topic", None)
+        valve_cfg.setdefault("open_payload", "ON")
+        valve_cfg.setdefault("close_payload", "ON")
+        valve_cfg.setdefault("stop_payload", "OFF")
+        valve_cfg.setdefault("travel_time_s", 30.0)
+        valve_cfg.setdefault("reverse_pause_s", 1.0)
+        valve_cfg.setdefault("min_move_s", 0.5)
+        valve_cfg.setdefault("ignore_delta_percent", 1.0)
+        HEATING["valve"] = valve_cfg
+    else:
+        HEATING.setdefault("valve", None)
 EXTERNAL_CONNECTION = yaml_cfg.get("external_connection", {})             # serwer zewnetrzny
 if isinstance(EXTERNAL_CONNECTION, dict):
     EXTERNAL_CONNECTION.setdefault("enabled", False)

@@ -27,6 +27,19 @@ const elements = {
   heatingHysteresis: document.querySelector('#heatingHysteresis'),
   heatingDayStart: document.querySelector('#heatingDayStart'),
   heatingNightStart: document.querySelector('#heatingNightStart'),
+  heatingMode: document.querySelector('#heatingMode'),
+  heatingBinaryFields: document.querySelector('#heatingBinaryFields'),
+  heatingValveFields: document.querySelector('#heatingValveFields'),
+  heatingValveOpenTopic: document.querySelector('#heatingValveOpenTopic'),
+  heatingValveCloseTopic: document.querySelector('#heatingValveCloseTopic'),
+  heatingValveStopTopic: document.querySelector('#heatingValveStopTopic'),
+  heatingValveOpenPayload: document.querySelector('#heatingValveOpenPayload'),
+  heatingValveClosePayload: document.querySelector('#heatingValveClosePayload'),
+  heatingValveStopPayload: document.querySelector('#heatingValveStopPayload'),
+  heatingValveTravelTime: document.querySelector('#heatingValveTravelTime'),
+  heatingValveReversePause: document.querySelector('#heatingValveReversePause'),
+  heatingValveMinMove: document.querySelector('#heatingValveMinMove'),
+  heatingValveIgnoreDelta: document.querySelector('#heatingValveIgnoreDelta'),
   saveHeating: document.querySelector('#saveHeating'),
   boneioList: document.querySelector('#boneioList'),
   addBoneio: document.querySelector('#addBoneio'),
@@ -285,9 +298,20 @@ function renderControl() {
   });
 }
 
+function updateHeatingModeVisibility(mode) {
+  const isValve = mode === 'three_way_valve';
+  elements.heatingBinaryFields?.classList.toggle('hidden', isValve);
+  elements.heatingValveFields?.classList.toggle('hidden', !isValve);
+}
+
 function renderHeating() {
   const heating = state.snapshot?.heating || {};
   elements.heatingEnabled.checked = Boolean(heating.enabled);
+  const mode = heating.mode || 'binary';
+  if (elements.heatingMode) {
+    elements.heatingMode.value = mode;
+  }
+  updateHeatingModeVisibility(mode);
   elements.heatingTopic.value = heating.topic || '';
   elements.heatingPayloadOn.value = heating.payload_on || '';
   elements.heatingPayloadOff.value = heating.payload_off || '';
@@ -296,6 +320,17 @@ function renderHeating() {
   elements.heatingHysteresis.value = heating.hysteresis_c ?? '';
   elements.heatingDayStart.value = heating.day_start || '';
   elements.heatingNightStart.value = heating.night_start || '';
+  const valve = heating.valve || {};
+  elements.heatingValveOpenTopic.value = valve.open_topic || '';
+  elements.heatingValveCloseTopic.value = valve.close_topic || '';
+  elements.heatingValveStopTopic.value = valve.stop_topic || '';
+  elements.heatingValveOpenPayload.value = valve.open_payload || '';
+  elements.heatingValveClosePayload.value = valve.close_payload || '';
+  elements.heatingValveStopPayload.value = valve.stop_payload || '';
+  elements.heatingValveTravelTime.value = valve.travel_time_s ?? '';
+  elements.heatingValveReversePause.value = valve.reverse_pause_s ?? '';
+  elements.heatingValveMinMove.value = valve.min_move_s ?? '';
+  elements.heatingValveIgnoreDelta.value = valve.ignore_delta_percent ?? '';
 }
 
 function createBoneioRow(device = {}, idx = 0) {
@@ -666,6 +701,18 @@ async function saveControl() {
 
 async function saveHeating() {
   try {
+    const toNumber = (input) => {
+      if (!input) {
+        return null;
+      }
+      const raw = input.value.trim();
+      if (raw === '') {
+        return null;
+      }
+      const parsed = Number(raw);
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+    const mode = elements.heatingMode?.value || 'binary';
     const payload = {
       enabled: elements.heatingEnabled.checked,
       topic: elements.heatingTopic.value.trim() || null,
@@ -676,9 +723,27 @@ async function saveHeating() {
       hysteresis_c: elements.heatingHysteresis.value === '' ? null : Number(elements.heatingHysteresis.value),
       day_start: elements.heatingDayStart.value || null,
       night_start: elements.heatingNightStart.value || null,
+      mode,
     };
+    if (mode === 'three_way_valve') {
+      payload.valve = {
+        open_topic: elements.heatingValveOpenTopic.value.trim() || null,
+        close_topic: elements.heatingValveCloseTopic.value.trim() || null,
+        stop_topic: elements.heatingValveStopTopic.value.trim() || null,
+        open_payload: elements.heatingValveOpenPayload.value.trim() || null,
+        close_payload: elements.heatingValveClosePayload.value.trim() || null,
+        stop_payload: elements.heatingValveStopPayload.value.trim() || null,
+        travel_time_s: toNumber(elements.heatingValveTravelTime),
+        reverse_pause_s: toNumber(elements.heatingValveReversePause),
+        min_move_s: toNumber(elements.heatingValveMinMove),
+        ignore_delta_percent: toNumber(elements.heatingValveIgnoreDelta),
+      };
+    } else {
+      payload.valve = null;
+    }
     const response = await apiRequest('/installer/config/heating', { method: 'POST', body: payload, spinner: 'Zapisywanie ogrzewania...' });
     state.snapshot.heating = response;
+    renderHeating();
     setStatus('Zapisano konfiguracje ogrzewania', 'ok');
   } catch (err) {
     if (err.message === 'missing-token') {
@@ -1192,6 +1257,9 @@ function bindEvents() {
   elements.refreshSensors?.addEventListener('click', refreshSensors);
   elements.saveControl?.addEventListener('click', saveControl);
   elements.saveHeating?.addEventListener('click', saveHeating);
+  elements.heatingMode?.addEventListener('change', (event) => {
+    updateHeatingModeVisibility(event.target.value);
+  });
   elements.addBoneio?.addEventListener('click', addBoneioRow);
   elements.saveBoneio?.addEventListener('click', saveBoneio);
   elements.boneioList?.addEventListener('click', handleBoneioListClick);

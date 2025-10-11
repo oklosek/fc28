@@ -199,15 +199,16 @@ def sanitize_heating_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise ConfigValidationError("Pole 'enabled' jest wymagane", "enabled")
     sanitized["enabled"] = _coerce_bool(payload.get("enabled"))
 
-    def _string_opt(key: str) -> None:
+    def _string_opt(key: str, container: Optional[Dict[str, Any]] = None) -> None:
+        target = sanitized if container is None else container
         if key not in payload:
             return
         value = payload.get(key)
         if value is None:
-            sanitized[key] = None
+            target[key] = None
             return
         value_str = str(value).strip()
-        sanitized[key] = value_str or None
+        target[key] = value_str or None
 
     for key in ("topic", "payload_on", "payload_off"):
         _string_opt(key)
@@ -246,6 +247,89 @@ def sanitize_heating_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     for key in ("day_start", "night_start"):
         _time_opt(key)
+
+    mode_default = "binary"
+    if isinstance(HEATING, dict):
+        mode_default = str(HEATING.get("mode") or "binary").strip().lower() or "binary"
+    mode_raw = payload.get("mode", mode_default)
+    mode = "binary" if mode_raw is None else str(mode_raw).strip().lower()
+    if mode not in {"binary", "three_way_valve"}:
+        raise ConfigValidationError("Nieobsługiwany tryb ogrzewania", "mode")
+    sanitized["mode"] = mode
+
+    if "mode" not in payload and "mode" not in sanitized:
+        sanitized["mode"] = mode_default
+
+    valve_payload = payload.get("valve")
+    if mode == "three_way_valve":
+        if not isinstance(valve_payload, dict):
+            raise ConfigValidationError("Pole 'valve' jest wymagane i musi być obiektem", "valve")
+        valve: Dict[str, Any] = {}
+
+        def _valve_string(key: str, required: bool = False) -> None:
+            if key not in valve_payload:
+                if required:
+                    raise ConfigValidationError(f"Pole 'valve.{key}' jest wymagane", f"valve.{key}")
+                return
+            raw = valve_payload.get(key)
+            if raw is None:
+                if required:
+                    raise ConfigValidationError(f"Pole 'valve.{key}' nie może być puste", f"valve.{key}")
+                valve[key] = None
+                return
+            trimmed = str(raw).strip()
+            if required and not trimmed:
+                raise ConfigValidationError(f"Pole 'valve.{key}' nie może być puste", f"valve.{key}")
+            valve[key] = trimmed or None
+
+        _valve_string("open_topic", required=True)
+        _valve_string("close_topic", required=True)
+        _valve_string("stop_topic")
+
+        for field in ("open_payload", "close_payload", "stop_payload"):
+            if field not in valve_payload:
+                continue
+            value = valve_payload.get(field)
+            if value is None:
+                valve[field] = None
+            else:
+                trimmed = str(value).strip()
+                valve[field] = trimmed or None
+
+        def _valve_float(key: str, *, minimum: float, allow_zero: bool) -> None:
+            if key not in valve_payload:
+                return
+            value = valve_payload.get(key)
+            if value in (None, ""):
+                valve[key] = None
+                return
+            number = _coerce_number(value, float)
+            if number < minimum or (not allow_zero and number <= 0):
+                comparator = f"nie mniejsza niż {minimum}"
+                if not allow_zero:
+                    comparator = "większa od 0" if minimum == 0 else f"większa od {minimum}"
+                raise ConfigValidationError(
+                    f"Pole 'valve.{key}' musi być {comparator}", f"valve.{key}"
+                )
+            valve[key] = float(number)
+
+        _valve_float("travel_time_s", minimum=0.0, allow_zero=False)
+        _valve_float("reverse_pause_s", minimum=0.0, allow_zero=True)
+        _valve_float("min_move_s", minimum=0.0, allow_zero=True)
+        _valve_float("ignore_delta_percent", minimum=0.0, allow_zero=True)
+
+        sanitized["valve"] = valve
+    elif valve_payload is not None:
+        if isinstance(valve_payload, dict):
+            valve_copy: Dict[str, Any] = {}
+            for key, value in valve_payload.items():
+                if value is None:
+                    valve_copy[key] = None
+                else:
+                    valve_copy[key] = value
+            sanitized["valve"] = valve_copy
+        else:
+            sanitized["valve"] = None
 
     return sanitized
 

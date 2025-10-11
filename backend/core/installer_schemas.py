@@ -33,6 +33,35 @@ class ControlSettingsPayload(BaseModel):
         extra = "forbid"
 
 
+class HeatingValveConfigPayload(BaseModel):
+    open_topic: str = Field(..., min_length=1)
+    close_topic: str = Field(..., min_length=1)
+    stop_topic: Optional[str] = Field(None, min_length=1)
+    open_payload: Optional[str] = None
+    close_payload: Optional[str] = None
+    stop_payload: Optional[str] = None
+    travel_time_s: Optional[float] = Field(None, gt=0.0)
+    reverse_pause_s: Optional[float] = Field(None, ge=0.0)
+    min_move_s: Optional[float] = Field(None, ge=0.0)
+    ignore_delta_percent: Optional[float] = Field(None, ge=0.0, le=100.0)
+
+    class Config:
+        extra = "forbid"
+
+    @validator("open_topic", "close_topic", "stop_topic", pre=True)
+    def _trim_topics(cls, value):  # noqa: D401 - simple normaliser
+        if value is None:
+            return value
+        return str(value).strip()
+
+    @validator("open_payload", "close_payload", "stop_payload", pre=True)
+    def _strip_payloads(cls, value):  # noqa: D401 - simple normaliser
+        if value is None:
+            return value
+        trimmed = str(value).strip()
+        return trimmed or None
+
+
 class HeatingConfigPayload(BaseModel):
     enabled: bool = Field(..., description="Czy ogrzewanie jest aktywne")
     topic: Optional[str] = Field(None, description="Temat MQTT dla wyzwalania ogrzewania")
@@ -43,9 +72,38 @@ class HeatingConfigPayload(BaseModel):
     hysteresis_c: Optional[float] = Field(None, ge=0.0, le=20.0)
     day_start: Optional[str] = Field(None, pattern=r"^([01]?\d|2[0-3]):[0-5]\d$")
     night_start: Optional[str] = Field(None, pattern=r"^([01]?\d|2[0-3]):[0-5]\d$")
+    mode: Literal["binary", "three_way_valve"] = Field(
+        "binary", description="Sposob sterowania ogrzewaniem"
+    )
+    valve: Optional[HeatingValveConfigPayload] = Field(
+        None, description="Konfiguracja zaworu trojdroznego"
+    )
 
     class Config:
         extra = "forbid"
+
+    @validator("topic", "payload_on", "payload_off", pre=True)
+    def _strip_primary_fields(cls, value):  # noqa: D401 - trim helper
+        if value is None:
+            return value
+        trimmed = str(value).strip()
+        return trimmed or None
+
+    @validator("mode", pre=True, always=True)
+    def _normalise_mode(cls, value):  # noqa: D401 - normalise user input
+        if value is None:
+            return "binary"
+        normalized = str(value).strip().lower()
+        if normalized not in {"binary", "three_way_valve"}:
+            raise ValueError("Nieobslugiwany tryb ogrzewania")
+        return normalized
+
+    @validator("valve", always=True)
+    def _require_valve_when_needed(cls, value, values):  # noqa: D401 - dependency check
+        mode = values.get("mode", "binary")
+        if mode == "three_way_valve" and value is None:
+            raise ValueError("Tryb zaworu wymaga konfiguracji 'valve'")
+        return value
 
 
 class VentTopicConfig(BaseModel):
